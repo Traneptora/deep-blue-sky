@@ -127,3 +127,12 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# OAuth Token
+oauth_token
+
+# Other Garbo
+*.log
+feed/
+commands/
+callmenames/
