@@ -134,5 +134,4 @@ oauth_token
 # Other Garbo
 *.log
 feed/
-commands/
-callmenames/
+storage/
