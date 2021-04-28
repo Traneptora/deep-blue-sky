@@ -361,7 +361,7 @@ def load_space_overrides():
                 space_overrides[space_id]['commands'] = {}
                 for command_json_fname in os.listdir(f'storage/{space_id}/commands/'):
                     with open(f'storage/{space_id}/commands/{command_json_fname}') as json_file:
-                        space_overrides[space_id]['commands'][command_json_fname.removesuffix('.json')] = json.load(json_file)
+                        space_overrides[space_id]['commands'][command_json_fname[:-5]] = json.load(json_file)
     except IOError as error:
         client.log_print('Unable to load space overrides')
         client.log_error(error)
@@ -442,7 +442,7 @@ async def on_message(message):
     space_id = get_space_id(message)
     command_prefix = get_in_space(space_id, 'command_prefix')
     if content.startswith(command_prefix):
-        command_string = content.removeprefix(command_prefix).strip()
+        command_string = content[len(command_prefix):].strip()
         await process_command(message, space_id, command_string)
 
 client.run()
