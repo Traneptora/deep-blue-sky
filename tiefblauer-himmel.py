@@ -10,7 +10,12 @@ from deep_blue_sky import DeepBlueSky
 client = DeepBlueSky()
 
 async def send_help(message: discord.Message, space_id, command_name, *args):
-    await message.channel.send(f'Looks like {command_name} is on the way!')
+    if is_moderator(message.author):
+        help_lines = [f'`{command}`: {help_list[command]}' for command in help_list]
+        help_string = '\n'.join(help_lines)
+    else:
+        help_string = 'Please send me a direct message.'
+    await message.channel.send(help_string)
 
 async def change_prefix(message: discord.Message, space_id, command_name, *args):
     if not is_moderator(message.author):
@@ -221,6 +226,7 @@ builtin_commands = {
          'type' : 'function',
          'author' : None,
          'value' : send_help,
+         'help' : 'Print help messages.'
     },
     'halp' : {
         'type' : 'alias',
@@ -235,12 +241,14 @@ builtin_commands = {
     'change-prefix' : {
         'type' : 'function',
         'author' : None,
-        'value' : change_prefix
+        'value' : change_prefix,
+        'help' : 'Change the command prefix in this space'
     },
     'reset-prefix' : {
         'type' : 'function',
         'author' : None,
-        'value' : reset_prefix
+        'value' : reset_prefix,
+        'help' : 'Restore the command prefix in this space to the default value'
     },
     'changeprefix' : {
         'type' : 'alias',
@@ -255,7 +263,8 @@ builtin_commands = {
     'newcommand' : {
         'type' : 'function',
         'author' : None,
-        'value' : new_command
+        'value' : new_command,
+        'help' : 'Create a new simple command'
     },
     'addcommand' : {
         'type' : 'alias',
@@ -275,7 +284,8 @@ builtin_commands = {
     'removecommand' : {
         'type' : 'function',
         'author' : None,
-        'value' : remove_command
+        'value' : remove_command,
+        'help' : 'Remove a simple command with a specific name'
     },
     'deletecommand' : {
         'type' : 'alias',
@@ -290,7 +300,8 @@ builtin_commands = {
     'updatecommand' : {
         'type' : 'function',
         'author' : None,
-        'value' : update_command
+        'value' : update_command,
+        'help' : 'Change the value of a simple command'
     },
     'renewcommand' : {
         'type' : 'alias',
@@ -305,7 +316,8 @@ builtin_commands = {
     'listcommands' : {
         'type' : 'function',
         'author' : None,
-        'value' : list_commands
+        'value' : list_commands,
+        'help' : 'List simple commands you own'
     },
     'commandlist' : {
         'type' : 'alias',
@@ -323,6 +335,11 @@ builtin_commands = {
         'value' : 'listcommands'
     }
 }
+
+help_list = {}
+for command in builtin_commands:
+    if 'help' in builtin_commands[command]:
+        help_list[command] = builtin_commands[command]['help']
 
 default_properties = {
     'id' : 'default',
