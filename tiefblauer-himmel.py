@@ -143,7 +143,7 @@ async def remove_command(message: discord.Message, space_id, command_name, comma
     return True
 
 async def update_command(message: discord.Message, space_id, command_name, command_predicate):
-    if not commmand_predicate:
+    if not command_predicate:
         await message.channel.send(f'Command name may not be empty\nUsage: `{command_name} <command_name> <command_value | attachment>`')
         return False
     new_name, new_value = split_command(command_predicate)
