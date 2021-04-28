@@ -111,7 +111,7 @@ async def remove_command(message: discord.Message, space_id, command_name, comma
     if not command_predicate:
         await message.channel.send(f'Command name may not be empty\nUsage: `{command_name} <command_name>`')
         return False
-    goodbye_name, split_predicate = split_command(commmand_predicate)
+    goodbye_name, split_predicate = split_command(command_predicate)
     if split_predicate:
         await message.channel.send(f'Invalid trailing arguments: `{split_predicate}`\nUsage: `{command_name} <command_name>`')
         return False
