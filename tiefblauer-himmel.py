@@ -125,7 +125,12 @@ async def remove_command(message: discord.Message, space_id, command_name, *args
         await message.channel.send(f'That command does not exist in this space.')
         return False
     if not is_moderator(message.author) and command['author'] != message.author.id:
-        await message.channel.send(f'That command does not belong to you. It belongs to `{client.get_user(command["author"])}`')
+        owner_user = client.get_user(command['author'])
+        if owner_user:
+            owner_nick = str(owner_user)
+        else:
+            owner_nick = str(command['author'])
+        await message.channel.send(f'That command does not belong to you. It belongs to `{owner_nick}`')
         return False
     
     old_command = space_overrides[space_id]['commands'].pop(goodbye_name)
@@ -155,7 +160,12 @@ async def update_command(message: discord.Message, space_id, command_name, *args
         await message.channel.send(f'That command does not exist in this space. Create it with `newcommand` instead.')
         return False
     if not is_moderator(message.author) and command['author'] != message.author.id:
-        await message.channel.send(f'That command does not belong to you. It belongs to `{client.get_user(command["author"])}`')
+        owner_user = client.get_user(command['author'])
+        if owner_user:
+            owner_nick = str(owner_user)
+        else:
+            owner_nick = str(command['author'])
+        await message.channel.send(f'That command does not belong to you. It belongs to `{owner_nick}`')
         return False
     if len(args) == 1: 
         if len(message.attachments) > 0:
