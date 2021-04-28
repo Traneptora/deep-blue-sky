@@ -426,7 +426,7 @@ def split_command(command_string):
     if len(args) == 0:
         return (None, None)
     command_name = args[0]
-    command_predicate = args[1] if len(args) > 0 else None
+    command_predicate = args[1] if len(args) > 1 else None
     command_name = command_name[0:64].rstrip(':').lower()
     return (command_name, command_predicate)
 
