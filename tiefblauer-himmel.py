@@ -9,7 +9,7 @@ from deep_blue_sky import DeepBlueSky
 
 client = DeepBlueSky()
 
-async def send_help(message: discord.Message, space_id, command_name, *args):
+async def send_help(message: discord.Message, space_id, command_name, command_predicate):
     if is_moderator(message.author):
         help_lines = [f'`{command}`: {help_list[command]}' for command in help_list]
         help_string = '\n'.join(help_lines)
@@ -17,17 +17,17 @@ async def send_help(message: discord.Message, space_id, command_name, *args):
         help_string = 'Please send me a direct message.'
     await message.channel.send(help_string)
 
-async def change_prefix(message: discord.Message, space_id, command_name, *args):
+async def change_prefix(message: discord.Message, space_id, command_name, command_predicate):
     if not is_moderator(message.author):
         await message.channel.send('Only moderators may do this.')
         return False
-    if len(args) > 1:
-        await message.channel.send(f'Invalid trailing arguments: `{"`, `".join(args[1:])}`\nUsage: `{command_name} <new_prefix>`')
+    new_prefix, split_predicate = split_command(command_predicate)
+    if split_predicate:
+        await message.channel.send(f'Invalid trailing predicate: `{split_predicate}`\nUsage: `{command_name} <new_prefix>`')
         return False
-    if len(args) == 0:
+    if not new_prefix:
         await message.channel.send(f'New prefix may not be empty\nUsage: `{command_name} <new_prefix>`')
         return False
-    new_prefix = args[0].lower()
     if not re.match(r'[a-z0-9_\-!.\.?]+', new_prefix):
         await message.channel.send(f'Invalid prefix: {new_prefix}\nOnly ASCII alphanumeric characters or `-_!.?` permitted\nUsage: `{command_name} <new_prefix>`')
         return False
@@ -45,12 +45,12 @@ async def change_prefix(message: discord.Message, space_id, command_name, *args)
     await message.channel.send(f'Prefix for this space changed to `{new_prefix}`')
     return True
 
-async def reset_prefix(message: discord.Message, space_id, command_name, *args):
+async def reset_prefix(message: discord.Message, space_id, command_name, command_predicate):
     if not is_moderator(message.author):
         await message.channel.send('Only moderators may do this.')
         return False
-    if len(args) > 0:
-        await message.channel.send(f'Invalid trailing arguments: `{"`, `".join(args)}`\nUsage: `{command_name}`')
+    if command_predicate:
+        await message.channel.send(f'Invalid trailing arguments: `{command_predicate}`\nUsage: `{command_name}`')
         return False
     if space_id not in space_overrides:
         space_overrides[space_id] = { 'id' : space_id }
@@ -65,25 +65,23 @@ async def reset_prefix(message: discord.Message, space_id, command_name, *args):
     await message.channel.send(f'Prefix for this space reset to the default, which is `{default_properties["command_prefix"]}`')
     return True
 
-async def new_command(message: discord.Message, space_id, command_name, *args):
-    if len(args) == 0:
+async def new_command(message: discord.Message, space_id, command_name, command_predicate):
+    if not command_predicate:
         await message.channel.send(f'Command name may not be empty\nUsage: `{command_name} <command_name> <command_value | attachment>`')
         return False
-    new_name = args[0]
+    new_name, new_value = split_command(command_predicate)
     if not re.match(r'[a-z0-9_\-!\.?]+', new_name):
         await message.channel.send(f'Invalid command name: {new_name}\nOnly ASCII alphanumeric characters or `-_!.?` permitted\nUsage: `{command_name} <command_name> <command_value | attachment>`')
         return False
     if find_command(space_id, new_name, follow_alias=False):
         await message.channel.send(f'That command already exists in this space. Try using `updatecommand` instead.')
         return False
-    if len(args) == 1: 
+    if not new_value: 
         if len(message.attachments) > 0:
             new_value = message.attachments[0].url
         else:
             await message.channel.send(f'Command value may not be empty\nUsage: `{command_name} <command_name> <command_value | attachment>`')
             return False
-    else:
-        new_value = ' '.join(args[1:])
 
     command = {
         'type' : 'simple',
@@ -109,14 +107,14 @@ async def new_command(message: discord.Message, space_id, command_name, *args):
     await message.channel.send(f'Command added successfully. Try it with: `{get_in_space(space_id, "command_prefix")}{new_name}`')
     return True
 
-async def remove_command(message: discord.Message, space_id, command_name, *args):
-    if len(args) == 0:
+async def remove_command(message: discord.Message, space_id, command_name, command_predicate):
+    if not command_predicate:
         await message.channel.send(f'Command name may not be empty\nUsage: `{command_name} <command_name>`')
         return False
-    if len(args) > 1:
-        await message.channel.send(f'Invalid trailing arguments: `{"`, `".join(args[1:])}`\nUsage: `{command_name} <command_name>>`')
+    goodbye_name, split_predicate = split_command(commmand_predicate)
+    if split_predicate:
+        await message.channel.send(f'Invalid trailing arguments: `{split_predicate}`\nUsage: `{command_name} <command_name>`')
         return False
-    goodbye_name = args[0]
     if find_command('default', goodbye_name, follow_alias=False, use_default=False):
         await message.channel.send(f'Built-in commands cannot be removed.')
         return False
@@ -144,11 +142,11 @@ async def remove_command(message: discord.Message, space_id, command_name, *args
     await message.channel.send(f'Command removed successfully.')
     return True
 
-async def update_command(message: discord.Message, space_id, command_name, *args):
-    if len(args) == 0:
+async def update_command(message: discord.Message, space_id, command_name, command_predicate):
+    if not commmand_predicate:
         await message.channel.send(f'Command name may not be empty\nUsage: `{command_name} <command_name> <command_value | attachment>`')
         return False
-    new_name = args[0]
+    new_name, new_value = split_command(command_predicate)
     if not re.match(r'[a-z0-9_\-!\.?]+', new_name):
         await message.channel.send(f'Invalid command name: {new_name}\nOnly ASCII alphanumeric characters or `-_!.?` permitted\nUsage: `{command_name} <command_name> <command_value | attachment>`')
         return False
@@ -167,14 +165,12 @@ async def update_command(message: discord.Message, space_id, command_name, *args
             owner_nick = str(command['author'])
         await message.channel.send(f'That command does not belong to you. It belongs to `{owner_nick}`')
         return False
-    if len(args) == 1: 
+    if not new_value:
         if len(message.attachments) > 0:
             new_value = message.attachments[0].url
         else:
             await message.channel.send(f'Command value may not be empty\nUsage: `{command_name} <command_name> <command_value | attachment>`')
             return False
-    else:
-        new_value = ' '.join(args[1:])
 
     old_value = command['value']
     command['value'] = new_value
@@ -188,9 +184,9 @@ async def update_command(message: discord.Message, space_id, command_name, *args
     await message.channel.send(f'Command updated successfully. Try it with: `{get_in_space(space_id, "command_prefix")}{new_name}`')
     return True
 
-async def list_commands(message: discord.Message, space_id, command_name, *args):
-    if len(args) > 0:
-        await message.channel.send(f'Invalid trailing arguments: `{"`, `".join(args)}`\nUsage: `{command_name}`')
+async def list_commands(message: discord.Message, space_id, command_name, command_predicate):
+    if command_predicate:
+        await message.channel.send(f'Invalid trailing arguments: `{command_predicate}`\nUsage: `{command_name}`')
         return False
     if space_id not in space_overrides:
         space_overrides[space_id] = { 'id' : space_id }
@@ -425,16 +421,23 @@ def find_command(space_id, command_name, follow_alias=True, use_default=True):
     else:
         return command
 
-async def process_command(message, space_id, command_string):
-    args = command_string.split()
+def split_command(command_string):
+    args = command_string.split(maxsplit=1)
     if len(args) == 0:
-        return
-    command_name, *arglist = args
+        return (None, None)
+    command_name = args[0]
+    command_predicate = args[1] if len(args) > 0 else None
     command_name = command_name[0:64].rstrip(':').lower()
+    return (command_name, command_predicate)
+
+async def process_command(message, space_id, command_string):
+    command_name, command_predicate = split_command(command_string)
+    if not command_name:
+        return
     command = find_command(space_id, command_name)
     if command:
         if command['type'] == 'function':
-            await command['value'](message, space_id, command_name, *arglist)
+            await command['value'](message, space_id, command_name, command_predicate)
         elif command['type'] in ('simple', 'alias'):
             await message.channel.send(command['value'])
         else:
