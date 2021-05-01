@@ -212,7 +212,7 @@ def save_space_overrides(space_id):
     command_list = space.pop('commands', None)
     try:
         os.makedirs(f'storage/{space_id}/', mode=0o755, exist_ok=True)
-        with open(f'storage/{space_id}/space.json', 'w') as json_file:
+        with open(f'storage/{space_id}/space.json', 'w', encoding='UTF-8') as json_file:
             json.dump(space, json_file)
     finally:
         if command_list: space['commands'] = command_list
@@ -227,7 +227,7 @@ def save_command(space_id, command_name):
     os.makedirs(f'storage/{space_id}/commands/', mode=0o755, exist_ok=True)
     command_json_fname = f'storage/{space_id}/commands/{command_name}.json'
     if command_name in space['commands']:
-        with open(command_json_fname, 'w') as json_file:
+        with open(command_json_fname, 'w', encoding='UTF-8') as json_file:
             json.dump(space['commands'][command_name], json_file)
     elif os.path.isfile(command_json_fname):
         os.remove(command_json_fname)
@@ -366,12 +366,13 @@ space_overrides = {
 def load_space_overrides():
     try:
         for space_id in os.listdir('storage/'):
-            with open(f'storage/{space_id}/space.json', 'r') as json_file:
-                space_overrides[space_id] = json.load(json_file)
+            space_json_fname = f'storage/{space_id}/space.json'
+            if os.path.exists(space_json_fname):
+                with open(space_json_fname, 'r', encoding='UTF-8') as json_file: space_overrides[space_id] = json.load(json_file)
             if os.path.isdir(f'storage/{space_id}/commands/'):
                 space_overrides[space_id]['commands'] = {}
                 for command_json_fname in os.listdir(f'storage/{space_id}/commands/'):
-                    with open(f'storage/{space_id}/commands/{command_json_fname}') as json_file:
+                    with open(f'storage/{space_id}/commands/{command_json_fname}', encoding='UTF-8') as json_file:
                         space_overrides[space_id]['commands'][command_json_fname[:-5]] = json.load(json_file)
     except IOError as error:
         client.logger.exception('Unable to load space overrides')
