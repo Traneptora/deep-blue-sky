@@ -39,8 +39,9 @@ async def change_prefix(message: discord.Message, space_id, command_name, comman
         save_space_overrides(space_id)
     except IOError as error:
         if old_prefix: space_overrides[space_id]['command_prefix'] = old_prefix
-        client.log_error(error)
-        await message.channel.send('Unknown error when changing prefix')
+        msg = 'Unknown error when changing prefix'
+        client.logger.exception(msg)
+        await message.channel.send(msg)
         return False
     await message.channel.send(f'Prefix for this space changed to `{new_prefix}`')
     return True
@@ -59,8 +60,9 @@ async def reset_prefix(message: discord.Message, space_id, command_name, command
         save_space_overrides(space_id)
     except IOError as error:
         if old_prefix: space_overrides[space_id]['command_prefix'] = old_prefix
-        client.log_error(error)
-        await message.channel.send('Unknown error when resetting prefix')
+        msg = 'Unknown error when resetting prefix'
+        client.logger.exception(msg)
+        await message.channel.send(msg)
         return False
     await message.channel.send(f'Prefix for this space reset to the default, which is `{default_properties["command_prefix"]}`')
     return True
@@ -101,8 +103,9 @@ async def new_command(message: discord.Message, space_id, command_name, command_
         save_command(space_id, new_name)
     except IOError as error:
         del space_overrides[space_id]['commands'][new_name]
-        client.log_error(error)
-        await message.channel.send('Unknown error when registering command')
+        msg = 'Unknown error when registering command'
+        client.logger.exception(msg)
+        await message.channel.send(msg)
         return False
     await message.channel.send(f'Command added successfully. Try it with: `{get_in_space(space_id, "command_prefix")}{new_name}`')
     return True
@@ -136,8 +139,9 @@ async def remove_command(message: discord.Message, space_id, command_name, comma
         save_command(space_id, goodbye_name)
     except IOError as error:
         space_overrides[space_id]['commands'][goodbye_name] = old_command
-        client.log_error(error)
-        await message.channel.send('Unknown error when removing command')
+        msg = 'Unknown error when removing command'
+        client.logger.exception(msg)
+        await message.channel.send(msg)
         return False
     await message.channel.send(f'Command removed successfully.')
     return True
@@ -178,8 +182,9 @@ async def update_command(message: discord.Message, space_id, command_name, comma
         save_command(space_id, new_name)
     except IOError as error:
         command['value'] = old_value
-        client.log_error(error)
-        await message.channel.send('Unknown error when updating command')
+        msg = 'Unknown error when updating command'
+        client.logger.exception('Unknown error when updating command')
+        await message.channel.send(msg)
         return False
     await message.channel.send(f'Command updated successfully. Try it with: `{get_in_space(space_id, "command_prefix")}{new_name}`')
     return True
@@ -369,14 +374,13 @@ def load_space_overrides():
                     with open(f'storage/{space_id}/commands/{command_json_fname}') as json_file:
                         space_overrides[space_id]['commands'][command_json_fname[:-5]] = json.load(json_file)
     except IOError as error:
-        client.log_print('Unable to load space overrides')
-        client.log_error(error)
+        client.logger.exception('Unable to load space overrides')
         return False
     return True
 
 @client.event
 async def on_ready():
-    client.log_print(f'Logged in as {client.user}')
+    client.logger.info(f'Logged in as {client.user}')
     game = discord.Game('--help')
     await client.change_presence(status=discord.Status.online, activity=game)
     load_space_overrides()
@@ -441,7 +445,7 @@ async def process_command(message, space_id, command_string):
         elif command['type'] in ('simple', 'alias'):
             await message.channel.send(command['value'])
         else:
-            client.log_print(f'Unknown command type: {command["type"]}')
+            client.logger.error(f'Unknown command type: {command["type"]}')
     else:
         await message.channel.send(f'Unknown command in this space: `{command_name}`')
 
