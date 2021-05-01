@@ -367,8 +367,9 @@ def load_space_overrides():
     try:
         for space_id in os.listdir('storage/'):
             space_json_fname = f'storage/{space_id}/space.json'
-            if os.path.exists(space_json_fname):
-                with open(space_json_fname, 'r', encoding='UTF-8') as json_file: space_overrides[space_id] = json.load(json_file)
+            if os.path.isfile(space_json_fname):
+                with open(space_json_fname, 'r', encoding='UTF-8') as json_file:
+                    space_overrides[space_id] = json.load(json_file)
             if os.path.isdir(f'storage/{space_id}/commands/'):
                 space_overrides[space_id]['commands'] = {}
                 for command_json_fname in os.listdir(f'storage/{space_id}/commands/'):
