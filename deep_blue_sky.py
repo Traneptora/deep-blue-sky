@@ -15,6 +15,7 @@ class DeepBlueSky(discord.Client):
 
     def __init__(self, *args, **kwargs):
         self.logger = logging.getLogger('discord')
+        self.logger.setLevel(logging.INFO)
         self.log_file = open('bot_output.log', mode='a', buffering=1, encoding='UTF-8')
         handler = logging.StreamHandler(stream=self.log_file)
         formatter = logging.Formatter(fmt='[{asctime}] {levelname}: {message}', style='{')
