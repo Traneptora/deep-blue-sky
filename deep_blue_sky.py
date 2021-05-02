@@ -268,6 +268,7 @@ class DeepBlueSky(discord.Client):
     def load_space_overrides(self):
         try:
             for space_id in os.listdir('storage/'):
+                self.space_overrides[space_id] = {}
                 space_json_fname = f'storage/{space_id}/space.json'
                 if os.path.isfile(space_json_fname):
                     with open(space_json_fname, 'r', encoding='UTF-8') as json_file:
