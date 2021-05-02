@@ -188,7 +188,7 @@ class DeepBlueSky(discord.Client):
         except IOError as error:
             command['value'] = old_value
             msg = 'Unknown error when updating command'
-            self.logger.exception('Unknown error when updating command')
+            self.logger.exception(msg)
             await message.channel.send(msg)
             return False
         await message.channel.send(f'Command updated successfully. Try it with: `{self.get_in_space(space_id, "command_prefix")}{new_name}`')
@@ -209,6 +209,34 @@ class DeepBlueSky(discord.Client):
             await message.channel.send('You do not own any commands in this space.')
         else:
             await message.channel.send(f'You own the following commands:\n```{", ".join(owned_commands)}```')
+
+    async def take_command(self, message: discord.Message, space_id, command_name, command_predicate):
+        if not self.is_moderator(message.author):
+            await message.channel.send('Only moderators may do this.')
+            return False
+        take_name, split_predicate = self.split_command(command_predicate)
+        if split_predicate:
+            await message.channel.send(f'Invalid trailing arguments: `{split_predicate}`\nUsage: `{command_name} <command_name>`')
+            return False
+        if self.find_command('default', take_name, follow_alias=False, use_default=False):
+            await message.channel.send(f'Built-in commands cannot be taken.')
+            return False
+        command = self.find_command(space_id, take_name, follow_alias=False)
+        if not command:
+            await message.channel.send(f'That command does not exist in this space.')
+            return False
+        old_author = command['author']
+        command['author'] = message.author.id
+        try:
+            self.save_command(space_id, take_name)
+        except IOError as error:
+            command['author'] = old_author
+            msg = 'Unknown error when taking command'
+            self.logger.exception(msg)
+            await message.channel.send(msg)
+            return False
+        await message.channel.send(f'Command ownership transfered successfully.')
+        return True
 
     def save_space_overrides(self, space_id):
         if space_id not in self.space_overrides:
@@ -471,9 +499,14 @@ class DeepBlueSky(discord.Client):
                 'type' : 'alias',
                 'author' : None,
                 'value' : 'listcommands'
+            },
+            'takecommand' : {
+                'type' : 'function',
+                'author' : None,
+                'value' : self.take_command,
+                'help' : 'Gain ownership of a simple command'
             }
         }
-
 
         self.help_list = {}
         for command in self.builtin_commands:
