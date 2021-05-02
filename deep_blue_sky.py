@@ -131,7 +131,7 @@ class DeepBlueSky(discord.Client):
             await message.channel.send(f'That command does not exist in this space.')
             return False
         if not self.is_moderator(message.author) and command['author'] != message.author.id:
-            owner_user = self.get_user(command['author'])
+            owner_user = await self.get_or_fetch_user(command['author'])
             if owner_user:
                 owner_nick = str(owner_user)
             else:
@@ -167,7 +167,7 @@ class DeepBlueSky(discord.Client):
             await message.channel.send(f'That command does not exist in this space. Create it with `newcommand` instead.')
             return False
         if not self.is_moderator(message.author) and command['author'] != message.author.id:
-            owner_user = self.get_user(command['author'])
+            owner_user = await self.get_or_fetch_user(command['author'])
             if owner_user:
                 owner_nick = str(owner_user)
             else:
@@ -293,6 +293,16 @@ class DeepBlueSky(discord.Client):
             return self.find_command(space_id, command['value'], follow_alias=False)
         else:
             return command
+
+    async def get_or_fetch_user(self, user_id):
+        user_obj = self.get_user(user_id)
+        if user_obj:
+            return user_obj
+        try:
+            user_obj = await self.fetch_user(user_id)
+        except discord.HTTPException:
+            return None
+        return user_obj
 
     def split_command(self, command_string):
         args = command_string.split(maxsplit=1)
