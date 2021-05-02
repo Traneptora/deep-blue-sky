@@ -321,12 +321,7 @@ class DeepBlueSky(discord.Client):
 
     # events
 
-    async def on_ready(self):
-        self.logger.info(f'Logged in as {self.user}')
-        game = discord.Game('--help')
-        await self.change_presence(status=discord.Status.online, activity=game)
-
-    async def on_message(self, message):
+    async def handle_message(self, message):
         if message.author == self.user:
             return
         if message.author.bot:
@@ -337,7 +332,6 @@ class DeepBlueSky(discord.Client):
         if content.startswith(command_prefix):
             command_string = content[len(command_prefix):].strip()
             await self.process_command(message, space_id, command_string)
-
 
     # setup stuff
 
