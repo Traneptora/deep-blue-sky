@@ -6,6 +6,7 @@ import json
 import traceback
 import urllib.request
 import contextlib, logging
+import requests
 
 import discord
 from discord.ext import tasks
@@ -424,6 +425,66 @@ class DeepBlueSky(discord.Client):
         return True
 
 
+    def lookup_tvtropes(self, article):
+        parts = re.sub(r'[^\w/]', '', article).split('/', maxsplit=1)
+        if len(parts) > 1:
+            namespace = parts[0]
+            title = parts[1]
+        else:
+            namespace = 'Main'
+            title = parts[0]
+        server = 'https://tvtropes.org'
+        query = '/pmwiki/pmwiki.php/' + namespace + '/' + title
+        result = requests.get(server + query, allow_redirects=False)
+        if 'location' in result.headers:
+            location = re.sub(r'\?.*$', '', result.headers['location'])
+            if location.startswith('/'):
+                return (True, server + location)
+            elif re.search(r'^[a-z]+://', location):
+                return (True, location)
+            else:
+                return (True, server + '/pmwiki/pmwiki.php/' + namespace + '/' + location)
+        result.encoding = 'UTF-8'
+        if re.search(r"<div>Inexact title\. See the list below\. We don't have an article named <b>{}</b>/{}, exactly\. We do have:".format(namespace, title), result.text):
+            return (False, result.url)
+        else:
+            if result.ok:
+                return (True, result.url)
+            else:
+                return (False, None)
+
+    def lookup_wikipedia(self, article):
+        params = { 'title' : 'Special:Search', 'go' : 'Go', 'ns0' : '1', 'search' : article }
+        result = requests.head('https://en.wikipedia.org/w/index.php', params=params)
+        if 'location' in result.headers:
+            return result.headers['location']
+        else:
+            return None
+
+    def lookup_wikis(self, article):
+        success, tv_url = self.lookup_tvtropes(article.strip())
+        if success:
+            return tv_url
+        wiki_url = self.lookup_wikipedia(article)
+        if wiki_url:
+            return wiki_url
+        if tv_url:
+            return f'Inexact Title Disambiguation Page Found:\n{tv_url}'
+        else:
+            return f'Unable to locate article: `{article}`'
+
+    async def handle_wiki_lookup(self, message):
+        chunks = message.content.split('```')
+        chunks = chunks[::2]
+        articles = []
+        for chunk in chunks:
+            chunks_again = chunk.split('`')
+            chunks_again = chunks_again[::2]
+            for chunk_again in chunks_again:
+                articles += re.findall(r'\[\[(.*?)\]\]', chunk_again)
+        if (len(articles) > 0):
+            await message.channel.send('\n'.join([self.lookup_wikis(article) for article in articles]))
+
     # events
 
     async def handle_message(self, message):
@@ -437,6 +498,8 @@ class DeepBlueSky(discord.Client):
         if content.startswith(command_prefix):
             command_string = content[len(command_prefix):].strip()
             await self.process_command(message, space_id, command_string)
+        elif self.get_in_space(space_id, 'wikitext'):
+            await self.handle_wiki_lookup(message)
 
     # setup stuff
 
