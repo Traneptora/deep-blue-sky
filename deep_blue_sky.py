@@ -221,7 +221,10 @@ class DeepBlueSky(discord.Client):
         if not command:
             await message.channel.send(f'That command does not exist in this space.')
             return False
-        if not self.is_moderator(message.author) and command['author'] != message.author.id:
+        if command['author'] == message.author.id:
+            await message.channel.send(f'You already own the command `{take_name}`.')
+            return False
+        if not self.is_moderator(message.author):
             owner_user = await self.get_or_fetch_user(command['author'], channel=message.channel)
             if owner_user:
                 await message.channel.send(f'The command `{take_name}` belongs to `{str(owner_user)}`. You cannot take it.')
