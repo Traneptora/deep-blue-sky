@@ -367,6 +367,63 @@ class DeepBlueSky(discord.Client):
             await message.channel.send(f'Unknown command in this space: `{command_name}`')
 
 
+    # wikitext stuff
+    
+    async def set_wikitext(self, message, space_id, command_name, command_predicate):
+        if not self.is_moderator(message.author):
+            await message.channel.send('Only moderators may do this.')
+            return False
+        new_enabled, split_predicate = self.split_command(command_predicate)
+        if split_predicate:
+            await message.channel.send(f'Invalid trailing predicate: `{split_predicate}`\nUsage: `{command_name} <enable/disable>`')
+            return False
+        if not new_enabled:
+            await message.channel.send(f'Choose enable or disable.\nUsage: `{command_name} <enable/disable>`')
+            return False
+        if re.match(r'yes|on|true|enabled?', new_enabled):
+            new_value = True
+        elif re.match(r'no|off|false|disabled?', new_enabled):
+            new_value = False
+        else:
+            await message.channel.send(f'Invalid enable/disable value: `{new_enabled}`\nUsage: `{command_name} <enable/disable>`')
+            return False
+        if space_id not in self.space_overrides:
+            self.space_overrides[space_id] = { 'id' : space_id }
+        old_value = self.space_overrides[space_id].get('wikitext', None)
+        self.space_overrides[space_id]['wikitext'] = new_value
+        try:
+            self.save_space_overrides(space_id)
+        except IOError as error:
+            if old_value: self.space_overrides[space_id]['wikitext'] = old_value
+            msg = 'Unknown error when setting wikitext preferences'
+            self.logger.exception(msg)
+            await message.channel.send(msg)
+            return False
+        await message.channel.send(f'Wikitext for this space changed to `{new_value}`')
+        return True
+
+    async def reset_wikitext(self, message, space_id, command_name, command_predicate):
+        if not self.is_moderator(message.author):
+            await message.channel.send('Only moderators may do this.')
+            return False
+        if command_predicate:
+            await message.channel.send(f'Invalid trailing predicate: `{command_predicate}`\nUsage: `{command_name}`')
+            return False
+        if space_id not in self.space_overrides:
+            self.space_overrides[space_id] = { 'id' : space_id }
+        old_value = self.space_overrides[space_id].pop('wikitext', None)
+        try:
+            self.save_space_overrides(space_id)
+        except IOError as error:
+            if old_value: self.space_overrides[space_id]['wikitext'] = old_value
+            msg = 'Unknown error when resetting wikitext'
+            self.logger.exception(msg)
+            await message.channel.send(msg)
+            return False
+        await message.channel.send(f'Wikitext for this space reset to the default, which is `{self.default_properties["wikitext"]}`')
+        return True
+
+
     # events
 
     async def handle_message(self, message):
@@ -515,6 +572,28 @@ class DeepBlueSky(discord.Client):
                 'author' : None,
                 'value' : self.take_command,
                 'help' : 'Gain ownership of a simple command'
+            },
+            'wikitext' : {
+                'type' : 'function',
+                'author' : None,
+                'value' : self.set_wikitext,
+                'help' : 'Enable or disable wikitext in this space'
+            },
+            'setwikitext' : {
+                'type' : 'alias',
+                'author' : None,
+                'value' : 'wikitext'
+            },
+            'reset-wikitext' : {
+                'type' : 'function',
+                'author' : None,
+                'value' : self.reset_wikitext,
+                'help' : 'Reset wikitext in this space to the default'
+            },
+            'resetwikitext' : {
+                'type' : 'alias',
+                'author' : None,
+                'value' : 'reset-wikitext'
             }
         }
 
@@ -526,7 +605,7 @@ class DeepBlueSky(discord.Client):
         self.default_properties = {
             'id' : 'default',
             'command_prefix' : '--',
-            'callme' : None,
+            'wikitext' : False,
             'commands' : {}
         }
 
