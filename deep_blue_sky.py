@@ -27,6 +27,9 @@ class DeepBlueSky(discord.Client):
         if not self.is_moderator(message.author):
             await message.channel.send('Only moderators may do this.')
             return False
+        if not command_predicate:
+            await message.channel.send(f'New prefix may not be empty\nUsage: `{command_name} <new_prefix>`')
+            return False
         new_prefix, split_predicate = self.split_command(command_predicate)
         if split_predicate:
             await message.channel.send(f'Invalid trailing predicate: `{split_predicate}`\nUsage: `{command_name} <new_prefix>`')
@@ -373,6 +376,9 @@ class DeepBlueSky(discord.Client):
     async def set_wikitext(self, message, space_id, command_name, command_predicate):
         if not self.is_moderator(message.author):
             await message.channel.send('Only moderators may do this.')
+            return False
+        if not command_predicate:
+            await message.channel.send(f'Choose enable or disable.\nUsage: `{command_name} <enable/disable>`')
             return False
         new_enabled, split_predicate = self.split_command(command_predicate)
         if split_predicate:
