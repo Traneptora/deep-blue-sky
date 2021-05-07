@@ -81,7 +81,7 @@ class DeepBlueSky(discord.Client):
             await message.channel.send(f'Invalid command name: {new_name}\nOnly ASCII alphanumeric characters or `-_!.?` permitted\nUsage: `{command_name} <command_name> <command_value | attachment>`')
             return False
         if self.find_command(space_id, new_name, follow_alias=False):
-            await message.channel.send(f'That command already exists in this space. Try using `updatecommand` instead.')
+            await message.channel.send(f'The command `{new_name}` already exists in this space. Try using `updatecommand` instead.')
             return False
         if not new_value: 
             if len(message.attachments) > 0:
@@ -128,17 +128,14 @@ class DeepBlueSky(discord.Client):
             return False
         command = self.find_command(space_id, goodbye_name, follow_alias=False)
         if not command:
-            await message.channel.send(f'That command does not exist in this space.')
+            await message.channel.send(f'The command `{goodbye_name}` does not exist in this space.')
             return False
         if not self.is_moderator(message.author) and command['author'] != message.author.id:
-            owner_user = await self.get_or_fetch_user(command['author'])
+            owner_user = await self.get_or_fetch_user(command['author'], channel=message.channel)
             if owner_user:
-                owner_nick = str(owner_user)
-            else:
-                owner_nick = str(command['author'])
-            await message.channel.send(f'That command does not belong to you. It belongs to `{owner_nick}`')
-            return False
-        
+                await message.channel.send(f'The command `{goodbye_name}` belongs to `{str(owner_user)}`. You cannot remove it.')
+                return False
+
         old_command = self.space_overrides[space_id]['commands'].pop(goodbye_name)
         try:
             self.save_command(space_id, goodbye_name)
@@ -148,7 +145,7 @@ class DeepBlueSky(discord.Client):
             self.logger.exception(msg)
             await message.channel.send(msg)
             return False
-        await message.channel.send(f'Command removed successfully.')
+        await message.channel.send(f'Command `{goodbye_name}` removed successfully.')
         return True
 
     async def update_command(self, message: discord.Message, space_id, command_name, command_predicate):
@@ -164,16 +161,14 @@ class DeepBlueSky(discord.Client):
             return False
         command = self.find_command(space_id, new_name, follow_alias=False)
         if not command:
-            await message.channel.send(f'That command does not exist in this space. Create it with `newcommand` instead.')
+            await message.channel.send(f'The command `{new_name}` does not exist in this space. Create it with `newcommand` instead.')
             return False
         if not self.is_moderator(message.author) and command['author'] != message.author.id:
-            owner_user = await self.get_or_fetch_user(command['author'])
+            owner_user = await self.get_or_fetch_user(command['author'], channel=message.channel)
             if owner_user:
-                owner_nick = str(owner_user)
-            else:
-                owner_nick = str(command['author'])
-            await message.channel.send(f'That command does not belong to you. It belongs to `{owner_nick}`')
-            return False
+                await message.channel.send(f'The command `{new_name}` belongs to `{str(owner_user)}`. You cannot update it.')
+                return False
+
         if not new_value:
             if len(message.attachments) > 0:
                 new_value = message.attachments[0].url
@@ -211,9 +206,6 @@ class DeepBlueSky(discord.Client):
             await message.channel.send(f'You own the following commands:\n```{", ".join(owned_commands)}```')
 
     async def take_command(self, message: discord.Message, space_id, command_name, command_predicate):
-        if not self.is_moderator(message.author):
-            await message.channel.send('Only moderators may do this.')
-            return False
         take_name, split_predicate = self.split_command(command_predicate)
         if split_predicate:
             await message.channel.send(f'Invalid trailing arguments: `{split_predicate}`\nUsage: `{command_name} <command_name>`')
@@ -225,6 +217,11 @@ class DeepBlueSky(discord.Client):
         if not command:
             await message.channel.send(f'That command does not exist in this space.')
             return False
+        if not self.is_moderator(message.author) and command['author'] != message.author.id:
+            owner_user = await self.get_or_fetch_user(command['author'], channel=message.channel)
+            if owner_user:
+                await message.channel.send(f'The command `{take_name}` belongs to `{str(owner_user)}`. You cannot take it.')
+                return False
         old_author = command['author']
         command['author'] = message.author.id
         try:
@@ -235,7 +232,7 @@ class DeepBlueSky(discord.Client):
             self.logger.exception(msg)
             await message.channel.send(msg)
             return False
-        await message.channel.send(f'Command ownership transfered successfully.')
+        await message.channel.send(f'Command ownership transfered successfully. You now own `{take_name}`.')
         return True
 
     def save_space_overrides(self, space_id):
@@ -323,7 +320,9 @@ class DeepBlueSky(discord.Client):
         else:
             return command
 
-    async def get_or_fetch_user(self, user_id):
+    async def get_or_fetch_user(self, user_id, channel=None):
+        if hasattr(channel, 'guild'):
+            return await self.get_or_fetch_member(channel.guild, user_id)
         user_obj = self.get_user(user_id)
         if user_obj:
             return user_obj
@@ -332,6 +331,16 @@ class DeepBlueSky(discord.Client):
         except discord.HTTPException:
             return None
         return user_obj
+
+    async def get_or_fetch_member(self, guild, user_id):
+        member_obj = guild.get_member(user_id)
+        if member_obj:
+            return member_obj
+        try:
+            member_obj = await guild.fetch_member(user_id)
+        except discord.HTTPException:
+            return None
+        return member_obj
 
     def split_command(self, command_string):
         args = command_string.split(maxsplit=1)
