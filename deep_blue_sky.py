@@ -327,6 +327,12 @@ class DeepBlueSky(discord.Client):
         else:
             return command
 
+    async def passthrough_command(self, message, space_id, command_name, command_predicate):
+        if not command_predicate:
+            await message.channel.send(f'Please provide a command name.\nUsage: {command_name} <command_name> [command_args...]')
+            return False
+        return await self.process_command(message, space_id, command_predicate)
+
     async def get_or_fetch_user(self, user_id, channel=None):
         if hasattr(channel, 'guild'):
             return await self.get_or_fetch_member(channel.guild, user_id)
@@ -361,17 +367,20 @@ class DeepBlueSky(discord.Client):
     async def process_command(self, message, space_id, command_string):
         command_name, command_predicate = self.split_command(command_string)
         if not command_name:
-            return
+            return False
         command = self.find_command(space_id, command_name)
         if command:
             if command['type'] == 'function':
-                await command['value'](message, space_id, command_name, command_predicate)
+                return await command['value'](message, space_id, command_name, command_predicate)
             elif command['type'] in ('simple', 'alias'):
                 await message.channel.send(command['value'])
+                return True
             else:
                 self.logger.error(f'Unknown command type: {command["type"]}')
+                return False
         else:
             await message.channel.send(f'Unknown command in this space: `{command_name}`')
+            return False
 
 
     # wikitext stuff
@@ -666,6 +675,17 @@ class DeepBlueSky(discord.Client):
                 'type' : 'alias',
                 'author' : None,
                 'value' : 'reset-wikitext'
+            },
+            'command' : {
+                'type' : 'function',
+                'author' : None,
+                'value' : self.passthrough_command,
+                'help' : 'Call a command (for backwards compatibility)'
+            },
+            'c' : {
+                'type' : 'alias',
+                'author' : None,
+                'value' : 'command'
             }
         }
 
