@@ -210,6 +210,9 @@ class DeepBlueSky(discord.Client):
             await message.channel.send(f'You own the following commands:\n```{", ".join(owned_commands)}```')
 
     async def take_command(self, message: discord.Message, space_id, command_name, command_predicate):
+        if not command_predicate:
+            await message.channel.send(f'Command name may not be empty\nUsage: `{command_name} <command_name>`')
+            return False
         take_name, split_predicate = self.split_command(command_predicate)
         if split_predicate:
             await message.channel.send(f'Invalid trailing arguments: `{split_predicate}`\nUsage: `{command_name} <command_name>`')
