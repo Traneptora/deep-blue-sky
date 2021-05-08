@@ -329,7 +329,7 @@ class DeepBlueSky(discord.Client):
 
     async def passthrough_command(self, message, space_id, command_name, command_predicate):
         if not command_predicate:
-            await message.channel.send(f'Please provide a command name.\nUsage: {command_name} <command_name> [command_args...]')
+            await message.channel.send(f'Command name may not be empty\nUsage: `{command_name} <command_name> [command_args...]`')
             return False
         return await self.process_command(message, space_id, command_predicate)
 
