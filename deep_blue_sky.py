@@ -336,8 +336,43 @@ class DeepBlueSky(discord.Client):
             return False
         return await self.process_command(message, space_id, command_predicate)
 
+    async def list_all_commands(self, message, space_id, command_name, command_predicate):
+        if not is_moderator(message.author):
+            await message.channel.send(f'Only moderators may do this.')
+            return False
+        if command_predicate:
+            await message.channel.send(f'Invalid trailing arguments: `{command_predicate}`\nUsage: `{command_name}`')
+            return False
+        if space_id not in self.space_overrides:
+            self.space_overrides[space_id] = { 'id' : space_id }
+        functional_commands = '**Built-in Commands**'
+        command_aliases = '**Aliases**'
+        custom_commands = '**Custom Commands**'
+        for name in self.builtin_commands:
+            command = self.builtin_commands[name]
+            if command['type'] == 'function':
+                functional_commands += f'\n`{name}`: `{command["help"]}`'
+            elif command['type'] == 'alias':
+                command_aliases += f'\n`{name}`: `{command["value"]}`'
+            elif command['type'] == 'simple':
+                functional_commands += f'\n{name}:` Reply with `{command["value"]}`'
+        space_commands = self.get_in_space(space_id, 'commands', use_default=True)
+        if len(space_commands):
+            for name in space_commands:
+                command = space_commands[name]
+                author = self.get_or_fetch_user(command["author"])
+                if author:
+                    author = str(author)
+                else:
+                    author = 'DEFUNCT'
+                custom_commands += f'\n`{name}: created by `{author}`'
+        else:
+            custom_commands += '\n(There are no custom commands in this space.)'
+        await message.channel.send(f'{functional_commands}\n\n{command_aliases}\n\n{custom_commands}')
+        return True
+
     async def get_or_fetch_user(self, user_id, channel=None):
-        if hasattr(channel, 'guild'):
+        if channel and hasattr(channel, 'guild'):
             return await self.get_or_fetch_member(channel.guild, user_id)
         user_obj = self.get_user(user_id)
         if user_obj:
@@ -689,6 +724,12 @@ class DeepBlueSky(discord.Client):
                 'type' : 'alias',
                 'author' : None,
                 'value' : 'command'
+            },
+            'listallcommands' {
+                'type' : 'functcion',
+                'author' : None,
+                'value' : self.list_all_commands,
+                'help' : 'List all commands in this space'
             }
         }
 
