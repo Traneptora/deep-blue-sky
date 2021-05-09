@@ -251,6 +251,32 @@ class DeepBlueSky(discord.Client):
         await message.channel.send(f'Command ownership transfered successfully. You now own `{take_name}`.')
         return True
 
+    async def who_owns_command(self, message, space_id, command_name, command_predicate):
+        if not command_predicate:
+            await message.channel.send(f'Command name may not be empty\nUsage: `{command_name} <command_name>`')
+            return False
+        who_name, split_predicate = self.split_command(command_predicate)
+        if split_predicate:
+            await message.channel.send(f'Invalid trailing arguments: `{split_predicate}`\nUsage: `{command_name} <command_name>`')
+            return False
+        if self.find_command('default', who_name, follow_alias=True, use_default=False):
+            await message.channel.send(f'The command `{who_name}` is built-in.')
+            return True
+        command = self.find_command(space_id, who_name, follow_alias=False)
+        if not command:
+            await message.channel.send(f'The command `{who_name}` does not exist in this space.')
+            return False
+        if command['author'] == message.author.id:
+            await message.channel.send(f'You own the command `{who_name}`.')
+            return True
+        owner_user = await self.get_or_fetch_user(command['author'], channel=message.channel)
+        if owner_user:
+            await message.channel.send(f'The command `{who_name}` belongs to `{str(owner_user)}`.')
+            return True
+        else:
+            await message.channel.send(f'The command `{who_name}` is currently unowned.')
+            return True
+
     def save_space_overrides(self, space_id):
         if space_id not in self.space_overrides:
             return False
@@ -738,6 +764,17 @@ class DeepBlueSky(discord.Client):
                 'author' : None,
                 'value' : self.list_all_commands,
                 'help' : 'List all commands in this space'
+            },
+            'whoowns' : {
+                'type' : 'function',
+                'author' : None,
+                'value' : self.who_owns_command,
+                'help' : 'Report who owns a simple command'
+            },
+            'owner' : {
+                'type' : 'alias',
+                'author' : None,
+                'value' : 'whoowns'
             }
         }
 
