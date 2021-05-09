@@ -369,7 +369,7 @@ class DeepBlueSky(discord.Client):
         if len(space_commands) > 0:
             for name in space_commands:
                 command = space_commands[name]
-                author = self.get_or_fetch_user(command["author"])
+                author = await self.get_or_fetch_user(command["author"])
                 if author:
                     author = str(author)
                 else:
