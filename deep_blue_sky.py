@@ -337,7 +337,7 @@ class DeepBlueSky(discord.Client):
         return await self.process_command(message, space_id, command_predicate)
 
     async def list_all_commands(self, message, space_id, command_name, command_predicate):
-        if not is_moderator(message.author):
+        if not self.is_moderator(message.author):
             await message.channel.send(f'Only moderators may do this.')
             return False
         if command_predicate:
@@ -351,11 +351,11 @@ class DeepBlueSky(discord.Client):
         for name in self.builtin_commands:
             command = self.builtin_commands[name]
             if command['type'] == 'function':
-                functional_commands += f'\n`{name}`: `{command["help"]}`'
+                functional_commands += f'\n`{name}`: {command["help"]}'
             elif command['type'] == 'alias':
-                command_aliases += f'\n`{name}`: `{command["value"]}`'
+                command_aliases += f'\n`{name}`: {command["value"]}'
             elif command['type'] == 'simple':
-                functional_commands += f'\n{name}:` Reply with `{command["value"]}`'
+                functional_commands += f'\n`{name}`: Reply with `{command["value"]}`'
             else:
                 self.logger.error(f'Invalid command type: {str(command)}')
                 return False
