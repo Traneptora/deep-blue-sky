@@ -373,7 +373,7 @@ class DeepBlueSky(discord.Client):
                     await message.channel.send(f'{response_string[:-2]}```')
                     response_string = '```'
                 response_string += f'{name}, '
-            custom_commands = f'{custom_commands[:-2]}```'
+            response_string = f'{response_string[:-2]}```'
         else:
             response_string += '\n(There are no custom commands in this space.)'
         await message.channel.send(response_string)
