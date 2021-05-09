@@ -353,7 +353,6 @@ class DeepBlueSky(discord.Client):
             self.space_overrides[space_id] = { 'id' : space_id }
         functional_commands = '**Built-in Commands**'
         command_aliases = '**Aliases**'
-        custom_commands = '**Custom Commands**'
         for name in self.builtin_commands:
             command = self.builtin_commands[name]
             if command['type'] == 'function':
@@ -365,19 +364,19 @@ class DeepBlueSky(discord.Client):
             else:
                 self.logger.error(f'Invalid command type: {str(command)}')
                 return False
-        await message.channel.send(f'{functional_commands}\n{command_aliases}')
+        response_string = f'{functional_commands}\n\n{command_aliases}\n\n**Custom Commands**'
         space_commands = self.get_in_space(space_id, 'commands', use_default=True)
         if len(space_commands) > 0:
-            custom_commands += '```'
+            response_string += '```'
             for name in space_commands:
-                if len(custom_commands) + len(name) + 2 >= 1997:
-                    await message.channel.send(f'{custom_commands[:-2]}```')
-                    custom_commands = '```'
-                custom_commands += f'{name}, '
+                if len(response_string) + len(name) + 2 >= 1997:
+                    await message.channel.send(f'{response_string[:-2]}```')
+                    response_string = '```'
+                response_string += f'{name}, '
             custom_commands = f'{custom_commands[:-2]}```'
         else:
-            custom_commands += '\n(There are no custom commands in this space.)'
-        await message.channel.send(custom_commands)
+            response_string += '\n(There are no custom commands in this space.)'
+        await message.channel.send(response_string)
         return True
 
     async def get_or_fetch_user(self, user_id, channel=None):
