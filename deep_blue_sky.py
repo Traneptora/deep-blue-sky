@@ -11,6 +11,12 @@ import requests
 import discord
 from discord.ext import tasks
 
+# https://stackoverflow.com/a/312464/411316
+def chunk_list(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
+
 class DeepBlueSky(discord.Client):
 
     # command functions
@@ -347,7 +353,7 @@ class DeepBlueSky(discord.Client):
             self.space_overrides[space_id] = { 'id' : space_id }
         functional_commands = '**Built-in Commands**'
         command_aliases = '**Aliases**'
-        custom_commands = '**Custom Commands**'
+        custom_commands = ['**Custom Commands**']
         for name in self.builtin_commands:
             command = self.builtin_commands[name]
             if command['type'] == 'function':
@@ -368,10 +374,14 @@ class DeepBlueSky(discord.Client):
                     author = str(author)
                 else:
                     author = 'DEFUNCT'
-                custom_commands += f'\n`{name}: created by `{author}`'
+                custom_commands += [f'`{name}`: created by `{author}`']
         else:
-            custom_commands += '\n(There are no custom commands in this space.)'
-        await message.channel.send(f'{functional_commands}\n\n{command_aliases}\n\n{custom_commands}')
+            custom_commands += ['(There are no custom commands in this space.)']
+        await message.channel.send(f'{functional_commands}\n\n{command_aliases}')
+        custom_chunks = chunk_list(custom_commands, 15)
+        for chunk in custom_chunks:
+            await message.channel.send('\n'.join(chunk))
+
         return True
 
     async def get_or_fetch_user(self, user_id, channel=None):
