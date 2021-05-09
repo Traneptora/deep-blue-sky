@@ -369,12 +369,7 @@ class DeepBlueSky(discord.Client):
         if len(space_commands) > 0:
             for name in space_commands:
                 command = space_commands[name]
-                author = await self.get_or_fetch_user(command["author"])
-                if author:
-                    author = str(author)
-                else:
-                    author = 'DEFUNCT'
-                custom_commands += [f'`{name}`: created by `{author}`']
+                custom_commands += [f'`{name}`: created by `{command["author"]}`']
         else:
             custom_commands += ['(There are no custom commands in this space.)']
         await message.channel.send(f'{functional_commands}\n\n{command_aliases}')
