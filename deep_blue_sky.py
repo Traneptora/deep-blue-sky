@@ -356,8 +356,11 @@ class DeepBlueSky(discord.Client):
                 command_aliases += f'\n`{name}`: `{command["value"]}`'
             elif command['type'] == 'simple':
                 functional_commands += f'\n{name}:` Reply with `{command["value"]}`'
+            else:
+                self.logger.error(f'Invalid command type: {str(command)}')
+                return False
         space_commands = self.get_in_space(space_id, 'commands', use_default=True)
-        if len(space_commands):
+        if len(space_commands) > 0:
             for name in space_commands:
                 command = space_commands[name]
                 author = self.get_or_fetch_user(command["author"])
@@ -726,7 +729,7 @@ class DeepBlueSky(discord.Client):
                 'value' : 'command'
             },
             'listallcommands' : {
-                'type' : 'functcion',
+                'type' : 'function',
                 'author' : None,
                 'value' : self.list_all_commands,
                 'help' : 'List all commands in this space'
