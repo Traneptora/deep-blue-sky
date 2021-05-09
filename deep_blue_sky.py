@@ -725,7 +725,7 @@ class DeepBlueSky(discord.Client):
                 'author' : None,
                 'value' : 'command'
             },
-            'listallcommands' {
+            'listallcommands' : {
                 'type' : 'functcion',
                 'author' : None,
                 'value' : self.list_all_commands,
