@@ -377,7 +377,7 @@ class DeepBlueSky(discord.Client):
             custom_commands += '```'
         else:
             custom_commands += '\n(There are no custom commands in this space.)'
-        message.channel.send(custom_commands)
+        await message.channel.send(custom_commands)
         return True
 
     async def get_or_fetch_user(self, user_id, channel=None):
