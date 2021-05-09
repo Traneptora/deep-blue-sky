@@ -374,7 +374,7 @@ class DeepBlueSky(discord.Client):
                     await message.channel.send(f'{custom_commands[:-2]}```')
                     custom_commands = '```'
                 custom_commands += f'{name}, '
-            custom_commands += '```'
+            custom_commands = f'{custom_commands[:-2]}```'
         else:
             custom_commands += '\n(There are no custom commands in this space.)'
         await message.channel.send(custom_commands)
