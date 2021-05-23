@@ -610,8 +610,8 @@ class DeepBlueSky(discord.Client):
     async def handle_wiki_lookup(self, message):
         chunks = self.get_all_noncode_chunks(message.content)
         articles = [re.findall(r'\[\[(.*?)\]\]', chunk) for chunk in chunks]
-        articles = [article for chunk in articles for article in chunk]
-        if (len(articles) > 0):
+        articles = [article for chunk in articles for article in chunk if len(article.strip()) > 0]
+        if len(articles) > 0:
             await message.channel.send('\n'.join([self.lookup_wikis(article) for article in articles]))
 
 
