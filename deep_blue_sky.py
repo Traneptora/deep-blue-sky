@@ -445,7 +445,7 @@ class DeepBlueSky(discord.Client):
             if command['type'] == 'function':
                 return await command['value'](message, space_id, command_name, command_predicate)
             elif command['type'] in ('simple', 'alias'):
-                await message.channel.send(command['value'])
+                await message.channel.send(self.escape_pings(command['value']))
                 return True
             else:
                 self.logger.error(f'Unknown command type: {command["type"]}')
@@ -563,17 +563,57 @@ class DeepBlueSky(discord.Client):
         else:
             return f'Unable to locate article: `{article}`'
 
+    def chunk_message(self, message_string, chunk_delimiter):
+        chunks = message_string.split(chunk_delimiter)
+        if len(chunks) % 2 == 0:
+            noncode_chunks = chunks[::2]
+            code_chunks = chunks[1:-1:2]
+            final_noncode_chunks = chunks[-1:]
+        else:
+            noncode_chunks = chunks[::2]
+            code_chunks = chunks[1::2]
+            final_noncode_chunks = []
+        return (noncode_chunks, final_noncode_chunks, code_chunks)
+
+    def assemble_message(self, noncode_chunks, code_chunks, chunk_delimiter):
+        if (len(noncode_chunks) + len(code_chunks)) % 2 == 0:
+            chunk_interleave = [val for pair in zip(noncode_chunks[:-2], code_chunks) for val in pair] + noncode_chunks[-2:]
+        else:
+            chunk_interleave = [val for pair in zip(noncode_chunks[:-1], code_chunks) for val in pair] + noncode_chunks[-1:]
+        return chunk_delimiter.join(chunk_interleave)
+
+    def get_all_noncode_chunks(self, message_string):
+        chunks, final_chunks, _ = self.chunk_message(message_string, '```')
+        ret = []
+        for chunk in chunks + final_chunks:
+            chunks_again, final_chunks_again, _ = self.chunk_message(chunk, '`')
+            ret += chunks_again + final_chunks_again
+        return ret
+
+    def _escape_ping_block(self, block_chunk):
+        inline_noncode_chunks, inline_final_chunks, inline_code_chunks = self.chunk_message(block_chunk, '`')
+        new_inline_noncode_chunks = [re.sub(r'(<@[^`0-9]?([0-9]+)>|@everyone|@here)', r'`\1`', string, flags=re.IGNORECASE) for string in inline_noncode_chunks]
+        new_inline_final_chunks = [re.subn(r'(<@[^`0-9]?([0-9]+)>|@everyone|@here)', r'`\1`', string, flags=re.IGNORECASE) for string in inline_final_chunks]
+        if len(new_inline_final_chunks) > 0 and new_inline_final_chunks[0][1] > 0:
+            new_inline_final_chunks[0] = ('`' + new_inline_final_chunks[0][0], 0)
+        new_inline_final_chunks = [x for x, y in new_inline_final_chunks]
+        assembled_block = self.assemble_message(new_inline_noncode_chunks + new_inline_final_chunks, inline_code_chunks, '`')
+        return assembled_block
+
+    def escape_pings(self, message_string):
+        block_noncode_chunks, block_final_chunks, block_code_chunks = self.chunk_message(message_string, '```')
+        block_noncode_chunks += block_final_chunks
+        block_noncode_chunks = [self._escape_ping_block(block_chunk) for block_chunk in block_noncode_chunks]
+        ret = self.assemble_message(block_noncode_chunks, block_code_chunks, '```')
+        return ret
+
     async def handle_wiki_lookup(self, message):
-        chunks = message.content.split('```')
-        chunks = chunks[::2]
-        articles = []
-        for chunk in chunks:
-            chunks_again = chunk.split('`')
-            chunks_again = chunks_again[::2]
-            for chunk_again in chunks_again:
-                articles += re.findall(r'\[\[(.*?)\]\]', chunk_again)
+        chunks = self.get_all_noncode_chunks(message.content)
+        articles = [re.findall(r'\[\[(.*?)\]\]', chunk) for chunk in chunks]
+        articles = [article for chunk in articles for article in chunk]
         if (len(articles) > 0):
             await message.channel.send('\n'.join([self.lookup_wikis(article) for article in articles]))
+
 
     # events
 
