@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import discord
-from deep_blue_sky import DeepBlueSky
+from deepbluesky import DeepBlueSky
 
 # Launch a default Deep Blue Sky bot
 
