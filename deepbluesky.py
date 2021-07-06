@@ -277,6 +277,14 @@ class DeepBlueSky(discord.Client):
             await message.channel.send(f'The command `{who_name}` is currently unowned.')
             return True
 
+    async def say(self, message, space_id, command_name, command_predicate):
+        if not command_predicate:
+            await message.channel.send(f'Message may not be empty\n--Usage: `{command_name} <message>`')
+            return False
+        else:
+            await message.channel.send(self.escape_pings(command_predicate))
+            return True
+
     def save_space_overrides(self, space_id):
         if space_id not in self.space_overrides:
             return False
@@ -815,6 +823,17 @@ class DeepBlueSky(discord.Client):
                 'type' : 'alias',
                 'author' : None,
                 'value' : 'whoowns'
+            },
+            'say' : {
+                'type' : 'function',
+                'author' : None,
+                'value' : self.say,
+                'help' : 'Repeat the message back'
+            },
+            'clyde' : {
+                'type': 'alias',
+                'author' : None,
+                'value' : 'say'
             }
         }
 
