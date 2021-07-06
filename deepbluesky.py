@@ -19,7 +19,7 @@ def chunk_list(lst, n):
 
 class DeepBlueSky(discord.Client):
 
-    async def send_to_channel(channel, message_to_send, sanitize=True):
+    async def send_to_channel(self, channel, message_to_send, sanitize=True):
         if sanitize:
             message_to_send = self.escape_pings(message_to_send)
         await channel.send(message_to_send)
