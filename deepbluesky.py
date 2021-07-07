@@ -289,7 +289,7 @@ class DeepBlueSky(discord.Client):
             await self.send_to_channel(message.channel, f'The command `{who_name}` does not exist in this space.')
             return False
         if command['author'] == message.author.id:
-            await self.send_to_channel(message.channel, f'You own the command `{who_name}`.')
+            await self.send_to_channel(message.channel, f'You own the command: `{who_name}`')
             return True
         owner_user = await self.get_or_fetch_user(command['author'], channel=message.channel)
         if owner_user:
