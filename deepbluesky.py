@@ -573,7 +573,7 @@ class DeepBlueSky(discord.Client):
         if location.startswith('/'):
             server = re.sub(r'^([a-zA-Z]+://[^/]*)/.*$', r'\1', query_url)
             return server + location
-        elif re.search(r'^[a-zA-Z]+://', location)
+        elif re.search(r'^[a-zA-Z]+://', location):
             return location
         else:
             return re.sub(r'^(([^/]*/)+)[^/]*', r'\1', query_url) + '/' + location;
@@ -586,7 +586,7 @@ class DeepBlueSky(discord.Client):
         params = { 'title' : 'Special:Search', 'go' : 'Go', 'ns0' : '1', 'search' : article }
         result = requests.head(mediawiki_base, params=params)
         if 'location' in result.headers:
-            location = self.relative_to_absolute_location(request.headers['location'], mediawiki_base)
+            location = self.relative_to_absolute_location(result.headers['location'], mediawiki_base)
             if ':' in location[7:] and not requests.head(location).ok:
                 return None
             else:
