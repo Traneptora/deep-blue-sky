@@ -19,10 +19,16 @@ def chunk_list(lst, n):
 
 class DeepBlueSky(discord.Client):
 
-    async def send_to_channel(self, channel, message_to_send, sanitize=True):
-        if sanitize:
-            message_to_send = self.escape_pings(message_to_send)
-        await channel.send(message_to_send)
+    async def send_to_channel(self, channel, message_to_send, ping_user=None, ping_roles=None):
+        if ping_user is discord.abc.Snowflake:
+            ping_user = [ping_user]
+        if ping_roles is discord.abc.Snowflake:
+            ping_roles = [ping_roles]
+        if not ping_user:
+            ping_user = []
+        if not ping_roles:
+            ping_roles = []
+        await channel.send(message_to_send, allowed_mentions=discord.AllowedMentions(users=ping_user, roles=ping_roles))
 
     # command functions
     
@@ -159,7 +165,7 @@ class DeepBlueSky(discord.Client):
         if not self.is_moderator(message.author) and command['author'] != message.author.id:
             owner_user = await self.get_or_fetch_user(command['author'], channel=message.channel)
             if owner_user:
-                await self.send_to_channel(message.channel, f'The command `{goodbye_name}` belongs to `{str(owner_user)}`. You cannot remove it.', sanitize=False)
+                await self.send_to_channel(message.channel, f'The command `{goodbye_name}` belongs to `<@!{command["author"]}>`. You cannot remove it.')
                 return False
 
         old_command = self.space_overrides[space_id]['commands'].pop(goodbye_name)
@@ -192,7 +198,7 @@ class DeepBlueSky(discord.Client):
         if not self.is_moderator(message.author) and command['author'] != message.author.id:
             owner_user = await self.get_or_fetch_user(command['author'], channel=message.channel)
             if owner_user:
-                await self.send_to_channel(message.channel, f'The command `{new_name}` belongs to `{str(owner_user)}`. You cannot update it.', sanitize=False)
+                await self.send_to_channel(message.channel, f'The command `{new_name}` belongs to `<@!{command["author"]}>`. You cannot update it.')
                 return False
 
         if not new_value:
@@ -252,7 +258,7 @@ class DeepBlueSky(discord.Client):
         if not self.is_moderator(message.author):
             owner_user = await self.get_or_fetch_user(command['author'], channel=message.channel)
             if owner_user:
-                await self.send_to_channel(message.channel, f'The command `{take_name}` belongs to `{str(owner_user)}`. You cannot take it.', sanitize=False)
+                await self.send_to_channel(message.channel, f'The command `{take_name}` belongs to `<@!{command["author"]}>`. You cannot take it.')
                 return False
         old_author = command['author']
         command['author'] = message.author.id
@@ -287,7 +293,7 @@ class DeepBlueSky(discord.Client):
             return True
         owner_user = await self.get_or_fetch_user(command['author'], channel=message.channel)
         if owner_user:
-            await self.send_to_channel(message.channel, f'The command `{who_name}` belongs to `{str(owner_user)}`.', sanitize=False)
+            await self.send_to_channel(message.channel, f'The command `{who_name}` belongs to `<@!{command["author"]}>`.')
             return True
         else:
             await self.send_to_channel(message.channel, f'The command `{who_name}` is currently unowned.')
@@ -298,7 +304,7 @@ class DeepBlueSky(discord.Client):
             await self.send_to_channel(message.channel, f'Message may not be empty\nUsage: `{command_name} <message>`')
             return False
         else:
-            await self.send_to_channel(message.channel, self.escape_pings(command_predicate))
+            await self.send_to_channel(message.channel, command_predicate)
             return True
 
     def save_space_overrides(self, space_id):
@@ -469,13 +475,13 @@ class DeepBlueSky(discord.Client):
             if command['type'] == 'function':
                 return await command['value'](message, space_id, command_name, command_predicate)
             elif command['type'] in ('simple', 'alias'):
-                await self.send_to_channel(message.channel, self.escape_pings(command['value']))
+                await self.send_to_channel(message.channel, command['value'])
                 return True
             else:
                 self.logger.error(f'Unknown command type: {command["type"]}')
                 return False
         else:
-            await self.send_to_channel(message.channel, self.escape_pings(f'Unknown command in this space: `{command_name}`'))
+            await self.send_to_channel(message.channel, f'Unknown command in this space: `{command_name}`')
             return False
 
 
@@ -672,8 +678,8 @@ class DeepBlueSky(discord.Client):
         formatter.converter = time.gmtime
         handler.setFormatter(formatter)
         self.logger.addHandler(handler)
-   
-        super().__init__(*args, **kwargs)
+
+        super().__init__(*args, allowed_mentions=discord.AllowedMentions.none(), **kwargs)
         for sig in [signal.SIGINT, signal.SIGTERM, signal.SIGHUP]:
             self.loop.add_signal_handler(sig, lambda sig = sig: asyncio.create_task(self.signal_handler(sig, self.loop)))
 
