@@ -565,7 +565,7 @@ class DeepBlueSky(discord.Client):
             else:
                 return (True, server + '/pmwiki/pmwiki.php/' + namespace + '/' + location)
         result.encoding = 'UTF-8'
-        if re.search(r"<div>Inexact title\. See the list below\. We don't have an article named <b>{}</b>/{}, exactly\. We do have:".format(namespace, title), result.text):
+        if re.search(r"<div>Inexact title\. See the list below\. We don't have an article named <b>{}</b>/{}, exactly\. We do have:".format(namespace, title), result.text, flags=re.IGNORECASE):
             return (False, result.url)
         else:
             if result.ok:
