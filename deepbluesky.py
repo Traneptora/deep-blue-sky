@@ -574,7 +574,8 @@ class DeepBlueSky(discord.Client):
                 return (False, None)
 
     def lookup_mediawiki(self, mediawiki_base, article):
-        params = { 'title' : 'Special:Search', 'go' : 'Go', 'ns0' : '1', 'search' : re.sub(r'\s', r'_', article, flags) }
+        params = { 'title' : 'Special:Search', 'go' : 'Go', 'ns0' : '1', 'search' : re.sub(r'\s', r'_', article) }
+        print(params)
         result = requests.head(mediawiki_base, params=params)
         if 'location' in result.headers:
             return result.headers['location']
@@ -592,7 +593,7 @@ class DeepBlueSky(discord.Client):
         wiki_url = self.lookup_mediawiki('https://en.wikipedia.org/w/index.php', article)
         if wiki_url:
             return wiki_url
-        if tv_url:
+        if tv_url and not extra_wikis:
             return f'Inexact Title Disambiguation Page Found:\n{tv_url}'
         else:
             return f'Unable to locate article: `{article}`'
