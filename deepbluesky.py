@@ -165,7 +165,7 @@ class DeepBlueSky(discord.Client):
         if not self.is_moderator(message.author) and command['author'] != message.author.id:
             owner_user = await self.get_or_fetch_user(command['author'], channel=message.channel)
             if owner_user:
-                await self.send_to_channel(message.channel, f'The command `{goodbye_name}` belongs to `<@!{command["author"]}>`. You cannot remove it.')
+                await self.send_to_channel(message.channel, f'The command `{goodbye_name}` belongs to <@!{command["author"]}>. You cannot remove it.')
                 return False
 
         old_command = self.space_overrides[space_id]['commands'].pop(goodbye_name)
@@ -198,7 +198,7 @@ class DeepBlueSky(discord.Client):
         if not self.is_moderator(message.author) and command['author'] != message.author.id:
             owner_user = await self.get_or_fetch_user(command['author'], channel=message.channel)
             if owner_user:
-                await self.send_to_channel(message.channel, f'The command `{new_name}` belongs to `<@!{command["author"]}>`. You cannot update it.')
+                await self.send_to_channel(message.channel, f'The command `{new_name}` belongs to <@!{command["author"]}>. You cannot update it.')
                 return False
 
         if not new_value:
@@ -258,7 +258,7 @@ class DeepBlueSky(discord.Client):
         if not self.is_moderator(message.author):
             owner_user = await self.get_or_fetch_user(command['author'], channel=message.channel)
             if owner_user:
-                await self.send_to_channel(message.channel, f'The command `{take_name}` belongs to `<@!{command["author"]}>`. You cannot take it.')
+                await self.send_to_channel(message.channel, f'The command `{take_name}` belongs to <@!{command["author"]}>. You cannot take it.')
                 return False
         old_author = command['author']
         command['author'] = message.author.id
@@ -293,7 +293,7 @@ class DeepBlueSky(discord.Client):
             return True
         owner_user = await self.get_or_fetch_user(command['author'], channel=message.channel)
         if owner_user:
-            await self.send_to_channel(message.channel, f'The command `{who_name}` belongs to `<@!{command["author"]}>`.')
+            await self.send_to_channel(message.channel, f'The command `{who_name}` belongs to <@!{command["author"]}>.')
             return True
         else:
             await self.send_to_channel(message.channel, f'The command `{who_name}` is currently unowned.')
