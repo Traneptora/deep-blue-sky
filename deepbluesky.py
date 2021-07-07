@@ -557,13 +557,8 @@ class DeepBlueSky(discord.Client):
         query = '/pmwiki/pmwiki.php/' + namespace + '/' + title
         result = requests.get(server + query, allow_redirects=False)
         if 'location' in result.headers:
-            location = re.sub(r'\?.*$', '', result.headers['location'])
-            if location.startswith('/'):
-                return (True, server + location)
-            elif re.search(r'^[a-z]+://', location):
-                return (True, location)
-            else:
-                return (True, server + '/pmwiki/pmwiki.php/' + namespace + '/' + location)
+            location = self.relative_to_absolute_location(request.headers['location'], server + query)
+            return (True, location)
         result.encoding = 'UTF-8'
         if re.search(r"<div>Inexact title\. See the list below\. We don't have an article named <b>{}</b>/{}, exactly\. We do have:".format(namespace, title), result.text, flags=re.IGNORECASE):
             return (False, result.url)
@@ -573,6 +568,16 @@ class DeepBlueSky(discord.Client):
             else:
                 return (False, None)
 
+    def relative_to_absolute_location(self, location, query_url):
+        query_url = re.sub(r'\?.*$', '', query_url)
+        if location.startswith('/'):
+            server = re.sub(r'^([a-zA-Z]+://[^/]*)/.*$', r'\1', query_url)
+            return server + location
+        elif re.search(r'^[a-zA-Z]+://', location)
+            return location
+        else:
+            return re.sub(r'^(([^/]*/)+)[^/]*', r'\1', query_url) + '/' + location;
+
     def lookup_mediawiki(self, mediawiki_base, article):
         parts = article.split('/')
         parts = [re.sub(r'^\s*([^\s]+(\s+[^\s]+)*)\s*$', r'\1', part) for part in parts]
@@ -581,7 +586,11 @@ class DeepBlueSky(discord.Client):
         params = { 'title' : 'Special:Search', 'go' : 'Go', 'ns0' : '1', 'search' : article }
         result = requests.head(mediawiki_base, params=params)
         if 'location' in result.headers:
-            return result.headers['location']
+            location = self.relative_to_absolute_location(request.headers['location'], mediawiki_base)
+            if ':' in location[7:] and not requests.head(location).ok:
+                return None
+            else:
+                return location
         else:
             return None
 
