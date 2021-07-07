@@ -24,7 +24,6 @@ class DeepBlueSky(discord.Client):
             message_to_send = self.escape_pings(message_to_send)
         await channel.send(message_to_send)
 
-
     # command functions
     
     async def send_help(self, message: discord.Message, space_id, command_name, command_predicate):
@@ -160,7 +159,7 @@ class DeepBlueSky(discord.Client):
         if not self.is_moderator(message.author) and command['author'] != message.author.id:
             owner_user = await self.get_or_fetch_user(command['author'], channel=message.channel)
             if owner_user:
-                await self.send_to_channel(message.channel, f'The command `{goodbye_name}` belongs to `{str(owner_user)}`. You cannot remove it.')
+                await self.send_to_channel(message.channel, f'The command `{goodbye_name}` belongs to `{str(owner_user)}`. You cannot remove it.', sanitize=False)
                 return False
 
         old_command = self.space_overrides[space_id]['commands'].pop(goodbye_name)
@@ -193,7 +192,7 @@ class DeepBlueSky(discord.Client):
         if not self.is_moderator(message.author) and command['author'] != message.author.id:
             owner_user = await self.get_or_fetch_user(command['author'], channel=message.channel)
             if owner_user:
-                await self.send_to_channel(message.channel, f'The command `{new_name}` belongs to `{str(owner_user)}`. You cannot update it.')
+                await self.send_to_channel(message.channel, f'The command `{new_name}` belongs to `{str(owner_user)}`. You cannot update it.', sanitize=False)
                 return False
 
         if not new_value:
@@ -253,7 +252,7 @@ class DeepBlueSky(discord.Client):
         if not self.is_moderator(message.author):
             owner_user = await self.get_or_fetch_user(command['author'], channel=message.channel)
             if owner_user:
-                await self.send_to_channel(message.channel, f'The command `{take_name}` belongs to `{str(owner_user)}`. You cannot take it.')
+                await self.send_to_channel(message.channel, f'The command `{take_name}` belongs to `{str(owner_user)}`. You cannot take it.', sanitize=False)
                 return False
         old_author = command['author']
         command['author'] = message.author.id
@@ -288,7 +287,7 @@ class DeepBlueSky(discord.Client):
             return True
         owner_user = await self.get_or_fetch_user(command['author'], channel=message.channel)
         if owner_user:
-            await self.send_to_channel(message.channel, f'The command `{who_name}` belongs to `{str(owner_user)}`.')
+            await self.send_to_channel(message.channel, f'The command `{who_name}` belongs to `{str(owner_user)}`.', sanitize=False)
             return True
         else:
             await self.send_to_channel(message.channel, f'The command `{who_name}` is currently unowned.')
