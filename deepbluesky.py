@@ -587,8 +587,12 @@ class DeepBlueSky(discord.Client):
         result = requests.head(mediawiki_base, params=params)
         if 'location' in result.headers:
             location = self.relative_to_absolute_location(result.headers['location'], mediawiki_base)
-            if ':' in location[7:] and not requests.head(location).ok:
-                return None
+            if ':' in location[7:]:
+                second_result = requests.head(location)
+                if second_result.ok and 'last-modified' in second_result.headers:
+                    return location
+                else:
+                    return None
             else:
                 return location
         else:
