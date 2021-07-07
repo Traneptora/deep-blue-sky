@@ -574,7 +574,7 @@ class DeepBlueSky(discord.Client):
                 return (False, None)
 
     def lookup_mediawiki(self, mediawiki_base, article):
-        params = { 'title' : 'Special:Search', 'go' : 'Go', 'ns0' : '1', 'search' : article }
+        params = { 'title' : 'Special:Search', 'go' : 'Go', 'ns0' : '1', 'search' : re.sub(r'\s', r'_', article, flags) }
         result = requests.head(mediawiki_base, params=params)
         if 'location' in result.headers:
             return result.headers['location']
