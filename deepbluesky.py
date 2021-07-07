@@ -573,19 +573,23 @@ class DeepBlueSky(discord.Client):
             else:
                 return (False, None)
 
-    def lookup_wikipedia(self, article):
+    def lookup_mediawiki(self, mediawiki_base, article):
         params = { 'title' : 'Special:Search', 'go' : 'Go', 'ns0' : '1', 'search' : article }
-        result = requests.head('https://en.wikipedia.org/w/index.php', params=params)
+        result = requests.head(mediawiki_base, params=params)
         if 'location' in result.headers:
             return result.headers['location']
         else:
             return None
 
-    def lookup_wikis(self, article):
+    def lookup_wikis(self, article, extra_wikis=None):
+        if extra_wikis:
+            for wiki in extra_wikis:
+                wiki_url = self.lookup_mediawiki(wiki, article)
+                if wiki_url: return wiki_url
         success, tv_url = self.lookup_tvtropes(article.strip())
         if success:
             return tv_url
-        wiki_url = self.lookup_wikipedia(article)
+        wiki_url = self.lookup_mediawiki('https://en.wikipedia.org/w/index.php', article)
         if wiki_url:
             return wiki_url
         if tv_url:
@@ -643,17 +647,17 @@ class DeepBlueSky(discord.Client):
         ret = self.assemble_message(block_noncode_chunks, block_code_chunks, '```')
         return ret
 
-    async def handle_wiki_lookup(self, message):
+    async def handle_wiki_lookup(self, message, extra_wikis=None):
         chunks = self.get_all_noncode_chunks(message.content)
         articles = [re.findall(r'\[\[(.*?)\]\]', chunk) for chunk in chunks]
         articles = [article for chunk in articles for article in chunk if len(article.strip()) > 0]
         if len(articles) > 0:
-            await self.send_to_channel(message.channel, '\n'.join([self.lookup_wikis(article) for article in articles]))
+            await self.send_to_channel(message.channel, '\n'.join([self.lookup_wikis(article, extra_wikis=extra_wikis) for article in articles]))
 
 
     # events
 
-    async def handle_message(self, message):
+    async def handle_message(self, message, extra_wikis=None):
         if message.author == self.user:
             return
         if message.author.bot:
@@ -665,7 +669,7 @@ class DeepBlueSky(discord.Client):
             command_string = content[len(command_prefix):].strip()
             await self.process_command(message, space_id, command_string)
         elif self.get_in_space(space_id, 'wikitext'):
-            await self.handle_wiki_lookup(message)
+            await self.handle_wiki_lookup(message, extra_wikis=extra_wikis)
 
     # setup stuff
 
