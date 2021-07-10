@@ -31,7 +31,7 @@ class DeepBlueSky(discord.Client):
             pass
 
         try:
-            snowflake_input = list(a)
+            snowflake_input = list(snowflake_input)
         # probably an integer
         except TypeError:
             snowflake_input = [snowflake_input]
