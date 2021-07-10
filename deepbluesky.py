@@ -19,15 +19,32 @@ def chunk_list(lst, n):
 
 class DeepBlueSky(discord.Client):
 
+    def snowflake_list(self, snowflake_input):
+        if not snowflake_input:
+            return []
+
+        try:
+            snowflake_input = int(snowflake_input)
+        # intentionally not catching ValueError here, since string IDs should cast to int
+        # TypeError means not a snowflake, string, or int, so probably an iterable
+        except TypeError:
+            pass
+
+        try:
+            snowflake_input = list(a)
+        # probably an integer
+        except TypeError:
+            snowflake_input = [snowflake_input]
+
+        return [int(snowflake) for snowflake in snowflake_input]
+
+
     async def send_to_channel(self, channel, message_to_send, ping_user=None, ping_roles=None):
-        if ping_user is discord.abc.Snowflake:
-            ping_user = [ping_user]
-        if ping_roles is discord.abc.Snowflake:
-            ping_roles = [ping_roles]
-        if not ping_user:
-            ping_user = []
-        if not ping_roles:
-            ping_roles = []
+        ping_user = [self.get_or_fetch_user(user) for user in self.snowflake_list(ping_user)]
+        if hasattr(channel, 'guild'):
+            ping_roles = [self.get_role(role) for role in self.snowflake_list(ping_roles)]
+        else:
+            ping_roles = None
         await channel.send(message_to_send, allowed_mentions=discord.AllowedMentions(users=ping_user, roles=ping_roles))
 
     # command functions
