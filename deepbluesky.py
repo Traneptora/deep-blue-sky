@@ -42,7 +42,7 @@ class DeepBlueSky(discord.Client):
     async def send_to_channel(self, channel, message_to_send, ping_user=None, ping_roles=None):
         ping_user = [self.get_or_fetch_user(user) for user in self.snowflake_list(ping_user)]
         if hasattr(channel, 'guild'):
-            ping_roles = [self.get_role(role) for role in self.snowflake_list(ping_roles)]
+            ping_roles = [channel.guild.get_role(role) for role in self.snowflake_list(ping_roles)]
         else:
             ping_roles = None
         await channel.send(message_to_send, allowed_mentions=discord.AllowedMentions(users=ping_user, roles=ping_roles))
