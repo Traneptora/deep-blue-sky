@@ -130,6 +130,7 @@ dmypy.json
 
 # OAuth Token
 oauth_token
+oauth_token.*
 
 # Other Garbo
 *.log
