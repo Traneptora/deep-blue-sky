@@ -7,6 +7,7 @@ import traceback
 import urllib.request
 import contextlib, logging
 import requests
+import functools
 
 import discord
 from discord.ext import tasks
@@ -16,6 +17,31 @@ def chunk_list(lst, n):
     """Yield successive n-sized chunks from lst."""
     for i in range(0, len(lst), n):
         yield lst[i:i + n]
+
+def identity(input):
+    return input
+
+def owoify(text):
+    text = re.sub(r'r{1,2}|l{1,2}', 'w', text)
+    text = re.sub(r'R{1,2}|L{1,2}', 'W', text)
+    text = re.sub(r'([Nn])(?=[AEIOUYaeiouy])', r'\1y', text)
+    return text
+
+def spongebob(text):
+    total = ''
+    upper = False
+    for char in text.lower():
+        # space characters and the like are not
+        # lowercase even if the string is lowercase
+        if char.islower():
+            if upper:
+                total += char.upper()
+            else:
+                total += char
+            upper = not upper
+        else:
+            total += char
+    return total
 
 class DeepBlueSky(discord.Client):
 
@@ -316,12 +342,12 @@ class DeepBlueSky(discord.Client):
             await self.send_to_channel(message.channel, f'The command `{who_name}` is currently unowned.')
             return True
 
-    async def say(self, message, space_id, command_name, command_predicate):
+    async def say(self, message, space_id, command_name, command_predicate, processor=identity):
         if not command_predicate:
             await self.send_to_channel(message.channel, f'Message may not be empty\nUsage: `{command_name} <message>`')
             return False
         else:
-            await self.send_to_channel(message.channel, command_predicate)
+            await self.send_to_channel(message.channel, processor(command_predicate))
             return True
 
     def save_space_overrides(self, space_id):
@@ -894,13 +920,25 @@ class DeepBlueSky(discord.Client):
                 'type' : 'function',
                 'author' : None,
                 'value' : self.say,
-                'help' : 'Repeat the message back'
+                'help' : 'prints the text back, like echo(1)'
+            },
+            'owo' : {
+                'type': 'function',
+                'author': None,
+                'value': functools.partial(self.say, processor=owoify),
+                'help' : 'pwints the text back, wike echo(1)'
+            },
+            'spongebob' : {
+                'type': 'function',
+                'author': None,
+                'value': functools.partial(self.say, processor=spongebob),
+                'help' : 'pRiNtS tHe TeXt BaCk, LiKe EcHo(1)'
             },
             'clyde' : {
                 'type': 'alias',
                 'author' : None,
                 'value' : 'say'
-            }
+            },
         }
 
         self.help_list = {}
