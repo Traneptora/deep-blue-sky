@@ -1,33 +1,37 @@
 #!/usr/bin/env python3
 
-import asyncio, signal
-import os, re, sys, time
-import json
-import traceback
-import urllib.request
-import contextlib, logging
-import requests
+# Deep Blue Sky python discord bot
+# This file doesn't actually create a bot
+# For the reference implementation, see tiefblauer-himmel.py
+
+import abc
+import asyncio
 import functools
+import json
+import logging
+import os
+import re
+import signal
+import sys
+import time
+
+from collections import OrderedDict
+from typing import Any, Callable, Optional, Union
 
 import discord
+import requests
 from discord.ext import tasks
 
-# https://stackoverflow.com/a/312464/411316
-def chunk_list(lst, n):
-    """Yield successive n-sized chunks from lst."""
-    for i in range(0, len(lst), n):
-        yield lst[i:i + n]
-
-def identity(input):
+def identity(input: Any) -> Any:
     return input
 
-def owoify(text):
+def owoify(text: str) -> str:
     text = re.sub(r'r{1,2}|l{1,2}', 'w', text)
     text = re.sub(r'R{1,2}|L{1,2}', 'W', text)
     text = re.sub(r'([Nn])(?=[AEIOUYaeiouy])', r'\1y', text)
     return text
 
-def spongebob(text):
+def spongebob(text: str) -> str:
     total = ''
     upper = False
     for char in text.lower():
@@ -43,73 +47,76 @@ def spongebob(text):
             total += char
     return total
 
+def snowflake_list(snowflake_input: Optional[Union[str, discord.abc.Snowflake, int, list[Union[str, discord.abc.Snowflake, int]]]]) -> list[int]:
+    if not snowflake_input:
+        return []
+
+    try:
+        snowflake_input = int(snowflake_input)
+    # intentionally not catching ValueError here, since string IDs should cast to int
+    # TypeError means not a snowflake, string, or int, so probably an iterable
+    except TypeError:
+        pass
+
+    try:
+        snowflake_input = list(snowflake_input)
+    # probably an integer
+    except TypeError:
+        snowflake_input = [snowflake_input]
+
+    return [int(snowflake) for snowflake in snowflake_input]
+
+def split_command(command_string):
+    args = command_string.split(maxsplit=1)
+    if len(args) == 0:
+        return (None, None)
+    command_name = args[0]
+    command_predicate = args[1] if len(args) > 1 else None
+    command_name = command_name[0:64].rstrip(':').lower()
+    return (command_name, command_predicate)
+
 class DeepBlueSky(discord.Client):
 
-    def snowflake_list(self, snowflake_input):
-        if not snowflake_input:
-            return []
-
-        try:
-            snowflake_input = int(snowflake_input)
-        # intentionally not catching ValueError here, since string IDs should cast to int
-        # TypeError means not a snowflake, string, or int, so probably an iterable
-        except TypeError:
-            pass
-
-        try:
-            snowflake_input = list(snowflake_input)
-        # probably an integer
-        except TypeError:
-            snowflake_input = [snowflake_input]
-
-        return [int(snowflake) for snowflake in snowflake_input]
-
-
-    async def send_to_channel(self, channel, message_to_send, ping_user=None, ping_roles=None):
-        ping_user = [self.get_or_fetch_user(user) for user in self.snowflake_list(ping_user)]
+    async def send_to_channel(self, channel: discord.abc.Messageable, message_content: str, ping_user=None, ping_roles=None):
+        ping_user = [self.get_or_fetch_user(user) for user in snowflake_list(ping_user)]
         if hasattr(channel, 'guild'):
-            ping_roles = [channel.guild.get_role(role) for role in self.snowflake_list(ping_roles)]
+            ping_roles = [channel.guild.get_role(role) for role in snowflake_list(ping_roles)]
         else:
             ping_roles = []
         await channel.send(message_to_send, allowed_mentions=discord.AllowedMentions(users=ping_user, roles=ping_roles))
 
     # command functions
     
-    async def send_help(self, message: discord.Message, space_id, command_name, command_predicate):
-        if command_predicate:
-            wanted_help, split_predicate = self.split_command(command_predicate)
-        else:
-            wanted_help = None
-
+    async def send_help(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]):
+        wanted_help, _ = split_command(command_predicate) if command_predicate else (None, None)
         if not wanted_help:
-            if self.is_moderator(message.author):
-                help_lines = [f'`{command}`: {self.help_list[command]}' for command in self.help_list]
-                help_string = '\n'.join(help_lines)
+            if space.is_moderator(trigger.author):
+                help_string = '\n'.join([f'`{command.name}`: {command.get_help()}' for command in self.builtin_command_dict.values() if command.command_type != 'alias'])
             else:
                 help_string = 'Please send me a direct message.'
         else:
-            if wanted_help in self.help_list:
-                help_string = self.help_list[wanted_help]
+            if wanted_help in self.builtin_command_dict:
+                help_string = self.builtin_command_dict[wanted_help].get_help()
             else:
                 help_string = f'Cannot provide help in this space for: `{wanted_help}`'
-        await self.send_to_channel(message.channel, help_string)
+        await self.send_to_channel(trigger.channel, help_string)
 
-    async def change_prefix(self, message: discord.Message, space_id, command_name, command_predicate):
-        if not self.is_moderator(message.author):
-            await self.send_to_channel(message.channel, 'Only moderators may do this.')
+    async def change_prefix(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]):
+        if not space.is_moderator(trigger.author):
+            await self.send_to_channel(trigger.channel, 'Only moderators may do this.')
             return False
         if not command_predicate:
-            await self.send_to_channel(message.channel, f'New prefix may not be empty\nUsage: `{command_name} <new_prefix>`')
+            await self.send_to_channel(trigger.channel, f'New prefix may not be empty\nUsage: `{command_name} <new_prefix>`')
             return False
-        new_prefix, split_predicate = self.split_command(command_predicate)
+        new_prefix, split_predicate = split_command(command_predicate)
         if split_predicate:
-            await self.send_to_channel(message.channel, f'Invalid trailing predicate: `{split_predicate}`\nUsage: `{command_name} <new_prefix>`')
+            await self.send_to_channel(trigger.channel, f'Invalid trailing arguments: `{split_predicate}`\nUsage: `{command_name} <new_prefix>`')
             return False
         if not new_prefix:
-            await self.send_to_channel(message.channel, f'New prefix may not be empty\nUsage: `{command_name} <new_prefix>`')
+            await self.send_to_channel(trigger.channel, f'New prefix may not be empty\nUsage: `{command_name} <new_prefix>`')
             return False
         if not re.match(r'[a-z0-9_\-!.\.?]+', new_prefix):
-            await self.send_to_channel(message.channel, f'Invalid prefix: {new_prefix}\nOnly ASCII alphanumeric characters or `-_!.?` permitted\nUsage: `{command_name} <new_prefix>`')
+            await self.send_to_channel(trigger.channel, f'Invalid prefix: `{new_prefix}`\nOnly ASCII alphanumeric characters or `-_!.?` permitted\nUsage: `{command_name} <new_prefix>`')
             return False
         if space_id not in self.space_overrides:
             self.space_overrides[space_id] = { 'id' : space_id }
@@ -147,11 +154,11 @@ class DeepBlueSky(discord.Client):
         await self.send_to_channel(message.channel, f'Prefix for this space reset to the default, which is `{self.default_properties["command_prefix"]}`')
         return True
 
-    async def new_command(self, message: discord.Message, space_id, command_name, command_predicate):
+    async def create_command(self, message: discord.Message, space_id, command_name, command_predicate):
         if not command_predicate:
             await self.send_to_channel(message.channel, f'Command name may not be empty\nUsage: `{command_name} <command_name> <command_value | attachment>`')
             return False
-        new_name, new_value = self.split_command(command_predicate)
+        new_name, new_value = split_command(command_predicate)
         if not re.match(r'[a-z0-9_\-!\.?]+', new_name):
             await self.send_to_channel(message.channel, f'Invalid command name: {new_name}\nOnly ASCII alphanumeric characters or `-_!.?` permitted\nUsage: `{command_name} <command_name> <command_value | attachment>`')
             return False
@@ -194,7 +201,7 @@ class DeepBlueSky(discord.Client):
         if not command_predicate:
             await self.send_to_channel(message.channel, f'Command name may not be empty\nUsage: `{command_name} <command_name>`')
             return False
-        goodbye_name, split_predicate = self.split_command(command_predicate)
+        goodbye_name, split_predicate = split_command(command_predicate)
         if split_predicate:
             await self.send_to_channel(message.channel, f'Invalid trailing arguments: `{split_predicate}`\nUsage: `{command_name} <command_name>`')
             return False
@@ -227,7 +234,7 @@ class DeepBlueSky(discord.Client):
         if not command_predicate:
             await self.send_to_channel(message.channel, f'Command name may not be empty\nUsage: `{command_name} <command_name> <command_value | attachment>`')
             return False
-        new_name, new_value = self.split_command(command_predicate)
+        new_name, new_value = split_command(command_predicate)
         if not re.match(r'[a-z0-9_\-!\.?]+', new_name):
             await self.send_to_channel(message.channel, f'Invalid command name: {new_name}\nOnly ASCII alphanumeric characters or `-_!.?` permitted\nUsage: `{command_name} <command_name> <command_value | attachment>`')
             return False
@@ -236,7 +243,7 @@ class DeepBlueSky(discord.Client):
             return False
         command = self.find_command(space_id, new_name, follow_alias=False)
         if not command:
-            await self.send_to_channel(message.channel, f'The command `{new_name}` does not exist in this space. Create it with `newcommand` instead.')
+            await self.send_to_channel(message.channel, f'The command `{new_name}` does not exist in this space. Create it with `createcommand` instead.')
             return False
         if not self.is_moderator(message.author) and command['author'] != message.author.id:
             owner_user = await self.get_or_fetch_user(command['author'], channel=message.channel)
@@ -284,7 +291,7 @@ class DeepBlueSky(discord.Client):
         if not command_predicate:
             await self.send_to_channel(message.channel, f'Command name may not be empty\nUsage: `{command_name} <command_name>`')
             return False
-        take_name, split_predicate = self.split_command(command_predicate)
+        take_name, split_predicate = split_command(command_predicate)
         if split_predicate:
             await self.send_to_channel(message.channel, f'Invalid trailing arguments: `{split_predicate}`\nUsage: `{command_name} <command_name>`')
             return False
@@ -320,7 +327,7 @@ class DeepBlueSky(discord.Client):
         if not command_predicate:
             await self.send_to_channel(message.channel, f'Command name may not be empty\nUsage: `{command_name} <command_name>`')
             return False
-        who_name, split_predicate = self.split_command(command_predicate)
+        who_name, split_predicate = split_command(command_predicate)
         if split_predicate:
             await self.send_to_channel(message.channel, f'Invalid trailing arguments: `{split_predicate}`\nUsage: `{command_name} <command_name>`')
             return False
@@ -377,31 +384,66 @@ class DeepBlueSky(discord.Client):
         elif os.path.isfile(command_json_fname):
             os.remove(command_json_fname)
 
+    def get_message_space(self, message: discord.Message) -> Space:
+        if hasattr(message.channel, 'guild'):
+            space_id = f'guild_{message.channel.guild.id}'
+        elif hasattr(message.channel, 'recipient'):
+            space_id = f'dm_{message.channel.recipient.id}'
+        else:
+            space_id = f'chan_{message.channel.id}'
+        return self.get_space(space_id)
+
+    def get_space(self, space_id) -> Space:
+        if space_id in self.spaces: return self.spaces[space_id]
+
+        if space_id.startswith('dm_'):
+            try:
+                recipient_id = int(space_id[len('dm_'):])
+            except ValueError ex:
+                self.logger.exception(f'Invalid space_id: {space_id}')
+                raise ex
+            self.spaces[space_id] = DMSpace(client=self, recipient_id=recipient_id)
+        elif space_id.startswith('chan_'):
+            try:
+                channel_id = int(space_id[len('chan_'):])
+            except ValueError ex:
+                self.logger.exception(f'Invalid space_id: {space_id}')
+                raise ex
+            self.spaces[space_id] = ChannelSpace(client=self, channel_id=channel_id)
+        elif space_id.startswith('guild_'):
+            try:
+                guild_id = int(space_id[len('guild_'):])
+            except ValueError ex:
+                self.logger.exception(f'Invalid space_id: {space_id}')
+                raise ex
+            self.space[space_id] = GuildSpace(client=self, guild_id=guild_id)
+        else:
+            raise ValueError(f'Invalid space_id: {space_id}')
+
+        return self.spaces[space_id]
+
     def load_space_overrides(self):
         try:
             for space_id in os.listdir('storage/'):
-                self.space_overrides[space_id] = {}
+                space = self.get_space(space_id)
                 space_json_fname = f'storage/{space_id}/space.json'
                 if os.path.isfile(space_json_fname):
                     with open(space_json_fname, 'r', encoding='UTF-8') as json_file:
-                        self.space_overrides[space_id] = json.load(json_file)
+                        space_json = json.load(json_file)
+                        space.load_properties(space_json)
+                commands = []
                 if os.path.isdir(f'storage/{space_id}/commands/'):
-                    self.space_overrides[space_id]['commands'] = {}
                     for command_json_fname in os.listdir(f'storage/{space_id}/commands/'):
                         with open(f'storage/{space_id}/commands/{command_json_fname}', encoding='UTF-8') as json_file:
-                            self.space_overrides[space_id]['commands'][command_json_fname[:-5]] = json.load(json_file)
+                            command_json = json.load(json_file)
+                            commands += [command_json]
+                if not space.load_commands(commands):
+                    self.logger.error(f'Unable to load commands from space: {space_id}')
+                    return False
         except IOError as error:
             self.logger.exception('Unable to load space overrides')
             return False
         return True
-
-    def get_space_id(self, message):
-        if hasattr(message.channel, 'guild'):
-            return f'guild_{message.channel.guild.id}'
-        elif hasattr(message.channel, 'recipient'):
-            return f'dm_{message.channel.recipient.id}'
-        else:
-            return f'chan_{message.channel.id}'
 
     def is_moderator(self, user):
         if hasattr(user, 'guild_permissions'):
@@ -409,31 +451,14 @@ class DeepBlueSky(discord.Client):
         else:
             return True
 
-    def get_in_space(self, space_id, key, use_default=True):
-        if use_default:
-            if space_id in self.space_overrides and key in self.space_overrides[space_id]:
-                return self.space_overrides[space_id][key]
-            else:
-                return self.default_properties[key]
+    def find_command(self, space: Space, command_name: str, follow_alias: bool = True):
+        if command_name in self.builtin_command_dict:
+            command = self.builtin_command_dict[command_name]
+        elif command_name in space.custom_command_dict:
+            command = space.custom_command_dict[command_name]
         else:
-            if space_id in self.space_overrides:
-                return self.space_overrides[space_id].get(key, None)
-            else:
-                return None
-
-    def find_command(self, space_id, command_name, follow_alias=True, use_default=True):
-        if command_name in self.builtin_commands:
-            command = self.builtin_commands.get(command_name)
-        else:
-            command_list = self.get_in_space(space_id, 'commands', use_default=use_default)
-            if command_list and command_name in command_list:
-                command = command_list.get(command_name)
-            else:
-                return None
-        if follow_alias and command['type'] == 'alias':
-            return self.find_command(space_id, command['value'], follow_alias=False)
-        else:
-            return command
+            return None
+        return command.canonical() if follow_alias else command
 
     async def passthrough_command(self, message, space_id, command_name, command_predicate):
         if not command_predicate:
@@ -441,42 +466,62 @@ class DeepBlueSky(discord.Client):
             return False
         return await self.process_command(message, space_id, command_predicate)
 
-    async def list_all_commands(self, message, space_id, command_name, command_predicate):
-        if not self.is_moderator(message.author):
+    async def list_all_commands(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]):
+        if await space.is_moderator(trigger.author.id):
             await self.send_to_channel(message.channel, f'Only moderators may do this.')
             return False
         if command_predicate:
             await self.send_to_channel(message.channel, f'Invalid trailing arguments: `{command_predicate}`\nUsage: `{command_name}`')
             return False
-        if space_id not in self.space_overrides:
-            self.space_overrides[space_id] = { 'id' : space_id }
-        functional_commands = '**Built-in Commands**'
-        command_aliases = '**Aliases**'
-        for name in self.builtin_commands:
-            command = self.builtin_commands[name]
-            if command['type'] == 'function':
-                functional_commands += f'\n`{name}`: {command["help"]}'
-            elif command['type'] == 'alias':
-                command_aliases += f'\n`{name}`: {command["value"]}'
-            elif command['type'] == 'simple':
-                functional_commands += f'\n`{name}`: Reply with `{command["value"]}`'
+        builtin_command_string = '**Built-in Commands**'
+        alias_command_string = '**Aliases**'
+        for name, command in self.builtin_command_dict.items():
+            if command.command_type == 'function'
+                builtin_command_string += f'\n`{name}`: {command.get_help()}'
+            elif command.command_type == 'alias':
+                alias_command_string += f'\n`{name}`: {str(command.value)}'
+            elif command.command_type == 'simple':
+                builtin_command_string += f'\n`{name}`: Reply with `{command["value"]}`'
             else:
-                self.logger.error(f'Invalid command type: {str(command)}')
+                self.logger.error(f'Invalid command type: {name}, {command.command_type}')
                 return False
-        response_string = f'{functional_commands}\n\n{command_aliases}\n\n**Custom Commands**'
-        space_commands = self.get_in_space(space_id, 'commands', use_default=True)
-        if len(space_commands) > 0:
+        response_string = f'{builtin_command_string}\n\n{alias_command_string}\n\n**Custom Commands**'
+        if len(space.custom_command_dict) > 0:
             response_string += '```'
-            for name in space_commands:
-                if len(response_string) + len(name) + 2 >= 1997:
-                    await self.send_to_channel(message.channel, f'{response_string[:-2]}```')
+            for name in space.custom_command_dict:
+                # max 2k characters
+                # 1997 includes the ``` at the end
+                if len(response_string) + len(name) > 1997:
+                    await self.send_to_channel(trigger.channel, f'{response_string[:-2]}```')
                     response_string = '```'
                 response_string += f'{name}, '
             response_string = f'{response_string[:-2]}```'
         else:
             response_string += '\n(There are no custom commands in this space.)'
-        await self.send_to_channel(message.channel, response_string)
+        await self.send_to_channel(trigger.channel, response_string)
         return True
+
+    async def get_or_fetch_channel(self, channel_id):
+        channel_obj = self.get_channel(channel_id)
+        if channel_obj: return channel_obj
+
+        try:
+            channel_obj = await self.fetch_channel(channel_id)
+        except discord.HTTPException:
+            self.logger.exception(f'Could not fetch channel: {channel_id}')
+            return None
+        return channel_obj
+
+    async def get_or_fetch_guild(self, guild_id):
+        guild_obj = self.get_guild(guild_id)
+        if guild_obj: return guild_obj
+
+        try:
+            guild_obj = await self.fetch_guild(guild_id)
+        except discord.HTTPException:
+            self.logger.exception(f'Could not fetch guild: {guild_id}')
+            return None
+        return guild_obj
 
     async def get_or_fetch_user(self, user_id, channel=None):
         if channel and hasattr(channel, 'guild'):
@@ -487,6 +532,7 @@ class DeepBlueSky(discord.Client):
         try:
             user_obj = await self.fetch_user(user_id)
         except discord.HTTPException:
+            self.logger.exception(f'Could not fetch user: {user_id}')
             return None
         return user_obj
 
@@ -497,34 +543,19 @@ class DeepBlueSky(discord.Client):
         try:
             member_obj = await guild.fetch_member(user_id)
         except discord.HTTPException:
+            self.logger.exception(f'Could not fetch member: {member_id}')
             return None
         return member_obj
 
-    def split_command(self, command_string):
-        args = command_string.split(maxsplit=1)
-        if len(args) == 0:
-            return (None, None)
-        command_name = args[0]
-        command_predicate = args[1] if len(args) > 1 else None
-        command_name = command_name[0:64].rstrip(':').lower()
-        return (command_name, command_predicate)
-
-    async def process_command(self, message, space_id, command_string):
-        command_name, command_predicate = self.split_command(command_string)
+    async def process_command(self, trigger: discord.Message, space: Space, command_string: str) -> bool:
+        command_name, command_predicate = split_command(command_string)
         if not command_name:
             return False
-        command = self.find_command(space_id, command_name)
+        command = self.find_command(space, command_name, follow_alias=True)
         if command:
-            if command['type'] == 'function':
-                return await command['value'](message, space_id, command_name, command_predicate)
-            elif command['type'] in ('simple', 'alias'):
-                await self.send_to_channel(message.channel, command['value'])
-                return True
-            else:
-                self.logger.error(f'Unknown command type: {command["type"]}')
-                return False
+            return await command.invoke(trigger, space, command_name, command_predicate)
         else:
-            await self.send_to_channel(message.channel, f'Unknown command in this space: `{command_name}`')
+            await self.send_to_channel(trigger.channel, f'Unknown command in this space: `{command_name}`')
             return False
 
 
@@ -537,7 +568,7 @@ class DeepBlueSky(discord.Client):
         if not command_predicate:
             await self.send_to_channel(message.channel, f'Choose enable or disable.\nUsage: `{command_name} <enable/disable>`')
             return False
-        new_enabled, split_predicate = self.split_command(command_predicate)
+        new_enabled, split_predicate = split_command(command_predicate)
         if split_predicate:
             await self.send_to_channel(message.channel, f'Invalid trailing predicate: `{split_predicate}`\nUsage: `{command_name} <enable/disable>`')
             return False
@@ -678,11 +709,9 @@ class DeepBlueSky(discord.Client):
 
     def get_all_noncode_chunks(self, message_string):
         chunks, final_chunks, _ = self.chunk_message(message_string, '```')
-        ret = []
         for chunk in chunks + final_chunks:
             chunks_again, final_chunks_again, _ = self.chunk_message(chunk, '`')
-            ret += chunks_again + final_chunks_again
-        return ret
+            yield chunk_again for chunk_again in chunks_again + final_chunks_again
 
     # def _escape_ping_block(self, block_chunk):
     #     inline_noncode_chunks, inline_final_chunks, inline_code_chunks = self.chunk_message(block_chunk, '`')
@@ -694,18 +723,18 @@ class DeepBlueSky(discord.Client):
     #     assembled_block = self.assemble_message(inline_noncode_chunks, inline_code_chunks, '`')
     #     return assembled_block
 
-    def _escape_ping_block(self, block_chunk):
-        return re.sub(r'<?@(everyone|here|[^`0-9]?[0-9]+)>?', r'<@ \1>', block_chunk, flags=re.IGNORECASE)
+    # def _escape_ping_block(self, block_chunk):
+    #     return re.sub(r'<?@(everyone|here|[^`0-9]?[0-9]+)>?', r'<@ \1>', block_chunk, flags=re.IGNORECASE)
 
-    def escape_pings(self, message_string):
-        block_noncode_chunks, block_final_chunks, block_code_chunks = self.chunk_message(message_string, '```')
-        if len(block_final_chunks) > 0:
-            # Discord handles pings poorly, so we have to escape inside code blocks if we have mismatched delimiters
-            block_code_chunks = [re.sub(r'<?@(everyone|here|[^`0-9]?[0-9]+)>?', r'<@ \1>', block_chunk, flags=re.IGNORECASE) for block_chunk in block_code_chunks]
-        block_noncode_chunks += block_final_chunks
-        block_noncode_chunks = [self._escape_ping_block(block_chunk) for block_chunk in block_noncode_chunks]
-        ret = self.assemble_message(block_noncode_chunks, block_code_chunks, '```')
-        return ret
+    # def escape_pings(self, message_string):
+    #     block_noncode_chunks, block_final_chunks, block_code_chunks = self.chunk_message(message_string, '```')
+    #     if len(block_final_chunks) > 0:
+    #         # Discord handles pings poorly, so we have to escape inside code blocks if we have mismatched delimiters
+    #         block_code_chunks = [re.sub(r'<?@(everyone|here|[^`0-9]?[0-9]+)>?', r'<@ \1>', block_chunk, flags=re.IGNORECASE) for block_chunk in block_code_chunks]
+    #     block_noncode_chunks += block_final_chunks
+    #     block_noncode_chunks = [self._escape_ping_block(block_chunk) for block_chunk in block_noncode_chunks]
+    #     ret = self.assemble_message(block_noncode_chunks, block_code_chunks, '```')
+    #     return ret
 
     async def handle_wiki_lookup(self, message, extra_wikis=None):
         chunks = self.get_all_noncode_chunks(message.content)
@@ -713,23 +742,28 @@ class DeepBlueSky(discord.Client):
         articles = [article for chunk in articles for article in chunk if len(article.strip()) > 0]
         if len(articles) > 0:
             await self.send_to_channel(message.channel, '\n'.join([self.lookup_wikis(article, extra_wikis=extra_wikis) for article in articles]))
+            return True
+        else:
+            return False
 
 
     # events
 
-    async def handle_message(self, message, extra_wikis=None):
+    async def handle_message(self, message: discord.Message, extra_wikis=None) -> bool:
         if message.author == self.user:
-            return
+            return False
         if message.author.bot:
-            return
+            return False
         content = message.content.strip()
-        space_id = self.get_space_id(message)
-        command_prefix = self.get_in_space(space_id, 'command_prefix')
-        if content.startswith(command_prefix):
-            command_string = content[len(command_prefix):].strip()
-            await self.process_command(message, space_id, command_string)
+        space = self.get_message_space(message)
+        if content.startswith(space.command_prefix):
+            command_string = content[len(space.command_prefix):].strip()
+            await self.process_command(message, space, command_string)
+            return True
         elif self.get_in_space(space_id, 'wikitext'):
-            await self.handle_wiki_lookup(message, extra_wikis=extra_wikis)
+            return await self.handle_wiki_lookup(message, extra_wikis=extra_wikis)
+        else:
+            return False
 
     # setup stuff
 
@@ -742,218 +776,68 @@ class DeepBlueSky(discord.Client):
         formatter.converter = time.gmtime
         handler.setFormatter(formatter)
         self.logger.addHandler(handler)
-
-        super().__init__(*args, allowed_mentions=discord.AllowedMentions.none(), **kwargs)
+        intents = discord.Intents.default()
+        intents.members = True
+        super().__init__(*args, allowed_mentions=discord.AllowedMentions.none(), intents=intents, chunk_guilds_at_startup=True, **kwargs)
         for sig in [signal.SIGINT, signal.SIGTERM, signal.SIGHUP]:
             self.loop.add_signal_handler(sig, lambda sig = sig: asyncio.create_task(self.signal_handler(sig, self.loop)))
 
-        self.builtin_commands = {
-            'help' : {
-                 'type' : 'function',
-                 'author' : None,
-                 'value' : self.send_help,
-                 'help' : 'Print help messages.'
-            },
-            'halp' : {
-                'type' : 'alias',
-                'author' : None,
-                'value' : 'help'
-            },
-            'ping' : {
-                'type' : 'simple',
-                'author' : None,
-                'value' : 'pong'
-            },
-            'change-prefix' : {
-                'type' : 'function',
-                'author' : None,
-                'value' : self.change_prefix,
-                'help' : 'Change the command prefix in this space'
-            },
-            'reset-prefix' : {
-                'type' : 'function',
-                'author' : None,
-                'value' : self.reset_prefix,
-                'help' : 'Restore the command prefix in this space to the default value'
-            },
-            'changeprefix' : {
-                'type' : 'alias',
-                'author' : None,
-                'value' : 'change-prefix'
-            },
-            'resetprefix' : {
-                'type' : 'alias',
-                'author' : None,
-                'value' : 'reset-prefix'
-            },
-            'newcommand' : {
-                'type' : 'function',
-                'author' : None,
-                'value' : self.new_command,
-                'help' : 'Create a new simple command'
-            },
-            'addcommand' : {
-                'type' : 'alias',
-                'author' : None,
-                'value' : 'newcommand'
-            },
-            'createcommand' : {
-                'type' : 'alias',
-                'author' : None,
-                'value' : 'newcommand'
-            },
-            'addc' : {
-                'type' : 'alias',
-                'author' : None,
-                'value' : 'newcommand'
-            },
-            'removecommand' : {
-                'type' : 'function',
-                'author' : None,
-                'value' : self.remove_command,
-                'help' : 'Remove a simple command with a specific name'
-            },
-            'deletecommand' : {
-                'type' : 'alias',
-                'author' : None,
-                'value' : 'removecommand'
-            },
-            'delc' : {
-                'type' : 'alias',
-                'author' : None,
-                'value' : 'removecommand'
-            },
-            'updatecommand' : {
-                'type' : 'function',
-                'author' : None,
-                'value' : self.update_command,
-                'help' : 'Change the value of a simple command'
-            },
-            'renewcommand' : {
-                'type' : 'alias',
-                'author' : None,
-                'value' : 'updatecommand'
-            },
-            'fixc' : {
-                'type' : 'alias',
-                'author' : None,
-                'value' : 'updatecommand'
-            },
-            'listcommands' : {
-                'type' : 'function',
-                'author' : None,
-                'value' : self.list_commands,
-                'help' : 'List simple commands you own'
-            },
-            'commandlist' : {
-                'type' : 'alias',
-                'author' : None,
-                'value' : 'listcommands'
-            },
-            'clist' : {
-                'type' : 'alias',
-                'author' : None,
-                'value' : 'listcommands'
-            },
-            'listc' : {
-                'type' : 'alias',
-                'author' : None,
-                'value' : 'listcommands'
-            },
-            'takecommand' : {
-                'type' : 'function',
-                'author' : None,
-                'value' : self.take_command,
-                'help' : 'Gain ownership of a simple command'
-            },
-            'wikitext' : {
-                'type' : 'function',
-                'author' : None,
-                'value' : self.set_wikitext,
-                'help' : 'Enable or disable wikitext in this space'
-            },
-            'setwikitext' : {
-                'type' : 'alias',
-                'author' : None,
-                'value' : 'wikitext'
-            },
-            'reset-wikitext' : {
-                'type' : 'function',
-                'author' : None,
-                'value' : self.reset_wikitext,
-                'help' : 'Reset wikitext in this space to the default'
-            },
-            'resetwikitext' : {
-                'type' : 'alias',
-                'author' : None,
-                'value' : 'reset-wikitext'
-            },
-            'command' : {
-                'type' : 'function',
-                'author' : None,
-                'value' : self.passthrough_command,
-                'help' : 'Call a command (for backwards compatibility)'
-            },
-            'c' : {
-                'type' : 'alias',
-                'author' : None,
-                'value' : 'command'
-            },
-            'listallcommands' : {
-                'type' : 'function',
-                'author' : None,
-                'value' : self.list_all_commands,
-                'help' : 'List all commands in this space'
-            },
-            'whoowns' : {
-                'type' : 'function',
-                'author' : None,
-                'value' : self.who_owns_command,
-                'help' : 'Report who owns a simple command'
-            },
-            'owner' : {
-                'type' : 'alias',
-                'author' : None,
-                'value' : 'whoowns'
-            },
-            'say' : {
-                'type' : 'function',
-                'author' : None,
-                'value' : self.say,
-                'help' : 'prints the text back, like echo(1)'
-            },
-            'owo' : {
-                'type': 'function',
-                'author': None,
-                'value': functools.partial(self.say, processor=owoify),
-                'help' : 'pwints the text back, wike echo(1)'
-            },
-            'spongebob' : {
-                'type': 'function',
-                'author': None,
-                'value': functools.partial(self.say, processor=spongebob),
-                'help' : 'pRiNtS tHe TeXt BaCk, LiKe EcHo(1)'
-            },
-            'clyde' : {
-                'type': 'alias',
-                'author' : None,
-                'value' : 'say'
-            },
-        }
-
-        self.help_list = {}
-        for command in self.builtin_commands:
-            if 'help' in self.builtin_commands[command]:
-                self.help_list[command] = self.builtin_commands[command]['help']
-
         self.default_properties = {
-            'id' : 'default',
             'command_prefix' : '--',
             'wikitext' : False,
-            'commands' : {}
         }
 
-        self.space_overrides = {}
+        builtin_list = [
+            CommandFunction(name='help', value=self.send_help, helpstring='Print help messages'),
+            CommandSimple(name='ping', value='pong', builtin=True, helpstring='Reply with pong'),
+            CommandFunction(name='set-prefix', value=self.change_prefix, helpstring='Set the command prefix in this space'),
+            CommandFunction(name='reset-prefix', value=self.reset_prefix, helpstring='Restore the command prefix in this space to the default value'),
+            CommandFunction(name='set-wikitext', value=self.set_wikitext, helpstring='Enable or disable wikitext in this space'),
+            CommandFunction(name='reset-wikitext', value=self.reset_wikitext, helpstring='Restore wikitext in this space to the default value'),
+            CommandFunction(name='createcommand', value=self.create_command, helpstring='Create a new simple command in this space'),
+            CommandFunction(name='removecommand', value=self.remove_command, helpstring='Remove a simple command and all of its aliases'),
+            CommandFunction(name='updatecommand', value=self.update_command, helpstring='Change the value of a simple command'),
+            CommandFunction(name='listcommands', value=self.list_commands, helpstring='List simple commands you own'),
+            CommandFunction(name='takecommand', value=self.take_command, helpstring='Gain ownership of a simple command'),
+            CommandFunction(name='command', value=self.passthrough_command, helpstring='Call a command (this is for backwards compatibility)'),
+            CommandFunction(name='list-all-commands', value=self.list_all_commands, helpstring='List all commands in this space (this is spammy!)'),
+            CommandFunction(name='whoowns', value=self.who_owns_command, helpstring='Report who owns a simple command'),
+            CommandFunction(name='say', value=self.say, helpstring='prints the text back, like echo(1)'),
+            CommandFunction(name='owo', value=functools.partial(self.say, processor=owoify), helpstring='pwints the text back, wike echo(1)'),
+            CommandFunction(name='spongebob', value=functools.partial(self.say, processor=spongebob), helpstring='pRiNtS tHe TeXt BaCk, LiKe EcHo(1)'),
+        ]
+
+        self.builtin_command_dict = OrderedDict([(command.name, command) for command in builtin_list])
+
+        alias_list = [
+            CommandAlias(name='halp', value=self.builtin_command_dict['help']),
+            CommandAlias(name='changeprefix', value=self.builtin_command_dict['set-prefix']),
+            CommandAlias(name='change-prefix', value=self.builtin_command_dict['set-prefix']),
+            CommandAlias(name='resetprefix', value=self.builtin_command_dict['reset-prefix']),
+            CommandAlias(name='wikitext', value=self.builtin_command_dict['set-wikitext']),
+            CommandAlias(name='setwikitext', value=self.builtin_command_dict['set-wikitext']),
+            CommandAlias(name='resetwikitext', value=self.builtin_command_dict['reset-wikitext']),
+            CommandAlias(name='newcommand', value=self.builtin_command_dict['createcommand']),
+            CommandAlias(name='addcommand', value=self.builtin_command_dict['createcommand']),
+            CommandAlias(name='addc', value=self.builtin_command_dict['createcommand']),
+            CommandAlias(name='deletecommand', value=self.builtin_command_dict['removecommand']),
+            CommandAlias(name='delc', value=self.builtin_command_dict['removecommand']),
+            CommandAlias(name='renewcommand', value=self.builtin_command_dict['updatecommand']),
+            CommandAlias(name='fixc', value=self.builtin_command_dict['updatecommand']),
+            CommandAlias(name='commandlist', value=self.builtin_command_dict['listcommands']),
+            CommandAlias(name='clist', value=self.builtin_command_dict['listcommands']),
+            CommandAlias(name='listc', value=self.builtin_command_dict['listcommands']),
+            CommandAlias(name='commandlist', value=self.builtin_command_dict['listcommands']),
+            CommandAlias(name='c', value=self.builtin_command_dict['command']),
+            CommandAlias(name='listallcommands', value=self.builtin_command_dict['list-all-commands']),
+            CommandAlias(name='owner', value=self.builtin_command_dict['whoowns']),
+            CommandAlias(name='clyde', value=self.builtin_command_dict['say']),
+        ]
+
+        self.builtin_command_dict |= OrderedDict([(command.name, command) for command in alias_list])
+
+        self.spaces = {}
+
         self.load_space_overrides()
 
     # cleanup stuff
@@ -989,3 +873,309 @@ class DeepBlueSky(discord.Client):
             self.loop.run_until_complete(self.start(token, reconnect=True))
         finally:
             self.loop.close()
+
+
+class Space(abc.ABC):
+
+    custom_command_dict: dict[str, Command] = OrderedDict([])
+    crtime = int(time.time())
+    mtime = int(time.time())
+
+    def __init__(self, client: DeepBlueSky):
+        self.client = client
+        self.command_prefix = client.default_properties['command_prefix']
+        self.wikitext = client.default_properties['wikitext']
+
+    def load_properties(property_dict: dict[str, Any]):
+        if 'command_prefix' in property_dict:
+            self.command_prefix = property_dict['command_prefix']
+        if 'wikitext' in property_dict:
+            self.wikitext = property_dict['wikitext']
+        if 'crtime' in property_dict:
+            self.crtime = property_dict['crtime']
+        if 'mtime' in property_dict:
+            self.mtime = property_dict['mtime']
+
+    def load_command(command_dict) -> bool:
+        # python 3.10: use patterns
+        if command_dict['type'] != 'simple' and command_dict['type'] != 'alias':
+            msg = f'Invalid custom command type: {comamnd_dict["type"]}'
+            self.client.logger.error(msg)
+            raise ValueError(msg)
+
+        author_id = command_dict['author']
+        name = command_dict['name']
+        crtime = command_dict['crtime']
+        mtime = command_dict['mtime']
+        value = command_dict['value']
+
+        if command_dict['type'] == 'simple':
+            command = CommandSimple(name=name, author=author, creation_time=crtime, modification_time=mtime, value=value)
+        else:
+            if value in self.client.builtin_command_dict:
+                value = self.client.builtin_command_dict[value]
+            elif value in self.custom_command_dict:
+                value = self.custom_command_dict[value]
+            else:
+                self.client.logger.warning(f'cant add alias before its target. name: {name}, value: {value}')
+                return False
+            command = CommandAlias(name=name, author=author, creation_time=crtime, modification_time=mtime, value=value, builtin=False)
+        self.custom_command_dict[name] = command
+        return True
+
+    def load_commands(command_dict_list) -> bool:
+        failed_all = False
+        commands_to_add = command_dict_list[:]
+        while len(commands_to_add) > 0 and not failed_all:
+            failed_all = True
+            for command_dict in commands_to_add[:]:
+                if self.load_command(command_dict):
+                    commands_to_add.remove(command_dict)
+                    failed_all = False
+        if failed_all:
+            self.logger.error(f'Broken aliases detected in space: {space_id}')
+        return not failed_all
+
+    @abc.abstractmethod
+    async def is_moderator(self, user) -> bool:
+        pass
+
+    @abc.abstractmethod
+    def get_space_id(self) -> str:
+        pass
+
+    @abc.abstractmethod
+    def get_space_type(self) -> str:
+        pass
+
+    def __str__(self) -> str:
+        return self.get_space_id()
+
+class DMSpace(Space):
+
+    recipient_id: int = 0
+    recipient: Optional[discord.User] = None
+
+    def __init__(self, client: DeepBlueSky, recipient_id: int):
+        super().__init__(client=client)
+        self.recipient_id = recipient_id
+
+    async def get_recipient(self) -> discord.User:
+        if self.recipient: return self.recipient
+        recipient = self.client.get_or_fetch_user(self.recipient_id)
+        if not recipient:
+            raise RuntimeError(f'Cannot find user: {self.recipient_id}')
+        self.recipient = recipient
+        return self.recipient
+
+    def get_space_id(self) -> str:
+        return f'dm_{self.recipient_id}'
+
+    async def is_moderator(self, user) -> bool:
+        return True
+
+    def get_space_type(self) -> str:
+        return 'dm'
+
+class ChannelSpace(Space):
+
+    channel_id: int = 0
+    channel: Optional[discord.GroupChannel] = None
+
+    def __init__(self, client: DeepBlueSky, channel_id: int, command_list: list[Command] = []):
+        super().__init__(client=client, command_list=command_list)
+        self.channel_id = channel_id
+
+    async def get_channel(self) -> discord.GroupChannel:
+        if self.channel: return self.channel
+        channel = self.client.get_or_fetch_channel(self.channel_id)
+        if not channel:
+            raise RuntimeError(f'Cannot find channel: {channel_id}')
+        if channel is not discord.GroupChannel:
+            raise RuntimeError(f'Channel is not a GroupChannel: {channel_id}')
+        self.channel = channel
+        return self.channel
+
+    def get_space_id(self) -> str:
+        return f'chan_{self.channel_id}'
+
+    async def is_moderator(self, user) -> bool:
+        return True
+
+    def get_space_type(self) -> str:
+        return 'chan'
+
+class GuildSpace(Space):
+
+    guild_id: int = 0
+    guild: Optional[discord.Guild] = None
+
+    def __init__(self, client: DeepBlueSky, guild_id: int, command_list: list[Command] = []):
+        super().__init__(client=client, command_list=command_list)
+        self.guild_id = guild_id
+
+    def get_space_id(self) -> str:
+        return f'guild_{self.guild_id}'
+
+    def get_guild(self) -> discord.Guild:
+        if self.guild: return self.guild
+        guild = self.client.get_or_fetch_guild(self.guild_id)
+        if not guild:
+            raise RuntimeError(f'Cannot find guild: {self.guild_id}')
+        self.guild = guild
+        return self.guild
+
+    async def is_moderator(self, user) -> bool:
+        member = await self.client.get_or_fetch_member(self.get_guild(), user.id)
+        return member and member.guild_permissions.kick_members
+
+    def get_space_type(self) -> str:
+        return 'guild'
+
+class Command(abc.ABC):
+    name: str = ''
+    author: Optional[int] = None
+    command_type: str = ''
+    aliases: list[CommandAlias] = []
+    creation_time: Optional[int] = None
+    modification_time: Optional[int] = None
+    space: Optional[Space] = None
+
+    def __init__(self, name: str, author: Optional[int], command_type: str, creation_time: Optional[int], modification_time: Optional[int]):
+        self.name = name
+        self.author = author
+        self.command_type = command_type
+        self.creation_time = creation_time
+        self.modification_time = modification_time
+
+    # the returned string is the "result"
+    # it is sent to the channel, the caller must not then send it
+    @abc.abstractmethod
+    async def _invoke0(self, trigger: discord.Message, space: Space, name_used: str, command_predicate: Optional[str]) -> bool:
+        pass
+
+    async def invoke(self, trigger: discord.Message, space: Space, name_used: str, command_predicate: Optional[str]) -> bool:
+        if self.space and self.space != space:
+            space.client.logger.error(f'Command {self.name} owned by another space: {self.space}, not {space}')
+            return False
+        if self.can_call(trigger, space):
+            try:
+                result = await self._invoke0(trigger, space, name_used, command_predicate)
+                if result:
+                    space.client.logger.info(f'Command succeeded, author: {trigger.author.id}, name: {self.name}')
+                else:
+                    space.client.logger.error(f'Command failed, author: {trigger.author.id}, name: {self.name}')
+            except Exception ex:
+                space.client.logger.critical(f'Unexpected exception during command invocation: {str(ex)}', exc_info=True)
+                return False
+        else
+            space.client.logger.warning(f'User {trigger.author.id} illegally attempted command {self.name}')
+            return False
+
+    @abc.abstractmethod
+    def get_help(self) -> str:
+        pass
+
+    @abc.abstractmethod
+    def is_builtin(self) -> bool:
+        pass
+
+    async def can_call(self, trigger: discord.Message, space: Space) -> bool:
+        return True
+
+    def canonical(self, path: list = []) -> Command:
+        return self
+
+    def follow(self) -> Command:
+        return self
+
+    def __eq__(self, other) -> bool:
+        if not other:
+            return False
+        if id(self) == id(other):
+            return True
+        return self.name == other.name and self.Space == other.Space and self.command_type = other.command_type
+
+    def __hash__(self) -> int:
+        return hash((self.name, self.Space, self.command_type))
+
+class CommandSimple(Command):
+
+    value: str = ''
+    builtin: bool = False
+    helpstring: str = 'a simple command replies with its value'
+
+    def __init__(self, name: str, author: Optional[int] = None,  creation_time: Optional[int] = None, modification_time: Optional[int] = None, value: str, builtin: bool = False, helpstring: Optional[str] = None):
+        super().__init__(name=name, author=author, command_type='simple', creation_time=creation_time, modification_time=modification_time)
+        self.value = value
+        self.builtin = builtin
+        if helpstring: self.helpstring = helpstring
+
+    # override
+    async def _invoke0(self, trigger: discord.Message, space: Space, name_used: str, command_predicate: Optional[str]) -> bool:
+        try:
+            await space.client.send_to_channel(trigger.channel, self.value)
+        except discord.Forbidden:
+            space.client.logger.error(f'Insufficient permissions to send to channel. id: {trigger.channel.id}, name: {self.name}')
+            return False
+        return True
+
+    def get_help(self) -> str:
+        return self.helpstring
+
+    def is_builtin(self) -> bool:
+        return builtin
+
+class CommandAlias(Command):
+
+    builtin: bool = True
+
+    def __init__(self, name: str, author: Optional[int] = None, creation_time: Optional[int] = None, modification_time: Optional[int] = None, value: Command, builtin: Optional[bool] = None):
+        super().__init__(name=name, author=author, command_type='alias', creation_time=creation_time, modification_time=creation_time)
+        self.value = value
+        self.value.aliases += [self]
+        self.builtin = builtin if builtin is not None else self.value.is_builtin()
+
+    async def _invoke0(self, trigger: discord.Message, space: Space, name_used: str, command_predicate: Optional[str]) -> bool:
+        return await self.canonical().invoke(trigger, space, name_used, command_predicate)
+
+    def get_help(self) -> str:
+        return f'alias for `{self.value.name}`'
+
+    def is_builtin(self) -> bool:
+        return builtin
+
+    # Axiom of Regularity
+    # https://en.wikipedia.org/wiki/Axiom_of_regularity
+    # prevent infinte alias loops
+    # This should never fail because alias creation requires another command object
+    # but failsafes are good
+    def check_regularity(self, path: list = []) -> bool:
+        if self in path:
+            return False
+        if value is CommandAlias not value.verify_regularity(path + [self]): return False
+        return True
+
+    def canonical(self, path: list = []) -> Command:
+        if self in path:
+            raise RuntimeError(f'alias cycle detected: {self.name}, {path}')
+        return self.value.canonical(path + [self])
+
+    def follow(self) -> Command:
+        return self.value
+
+class CommandFunction(Command):
+
+    def __init__(self, name: str, value: Callable[[discord.Message, Space, str, str], bool], helpstring: str):
+        super().__init__(name=name, author=None, command_type='function', creation_time=None, modification_time=None)
+        self.value = value
+        self.helpstring = helpstring
+
+    def is_builtin(self) -> bool:
+        return True
+
+    async def _invoke0(self, trigger: discord.Message, space: Space, name_used: str, command_predicate: Optional[str]) -> bool:
+        return await self.value(self.client, trigger, space, name_used, command_predicate)
+
+    def get_help(self) -> str;
+        return self.helpstring
