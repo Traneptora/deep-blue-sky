@@ -734,7 +734,7 @@ class DeepBlueSky(discord.Client):
             CommandAlias(name='clyde', value=self.builtin_command_dict['say']),
         ]
 
-        self.builtin_command_dict |= OrderedDict([(command.name, command) for command in alias_list])
+        self.builtin_command_dict.update(OrderedDict([(command.name, command) for command in alias_list]))
         self.default_properties: Dict[str, Any] = {
             'command_prefix' : '--',
             'wikitext' : False,
