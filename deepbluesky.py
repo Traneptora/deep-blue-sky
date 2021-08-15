@@ -406,8 +406,11 @@ class DeepBlueSky(discord.Client):
             if os.path.isdir(f'storage/{space_id}/commands/'):
                 for command_json_fname in os.listdir(f'storage/{space_id}/commands/'):
                     with open(f'storage/{space_id}/commands/{command_json_fname}', encoding='UTF-8') as json_file:
-                        command_json = json.load(json_file)
-                        commands += [command_json]
+                        try:
+                            command_json = json.load(json_file)
+                            commands += [command_json]
+                        except json.decoder.JSONDecodeError as ex:
+                            self.logger.error(f'Corrupt command json: {command_json_fname} in {space_id}')
             if not space.load_commands(commands):
                 self.logger.error(f'Unable to load commands from space: {space_id}')
                 return False
