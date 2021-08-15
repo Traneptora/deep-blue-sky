@@ -207,7 +207,7 @@ class DeepBlueSky(discord.Client):
         command_set = {new_name}
         while remainder:
             new_name, remainder = split_command(remainder)
-            command_set |= {new_name}
+            command_set.add(new_name)
         for name in command_set:
             if name in self.builtin_command_dict:
                 await self.send_to_channel(trigger.channel, 'Built-in commands cannot be removed.')
@@ -224,7 +224,7 @@ class DeepBlueSky(discord.Client):
         while len(command_set) > 0:
             for name in list(command_set):
                 command = space.custom_command_dict[name]
-                command_set |= {alias.name for alias in command.aliases}
+                command_set.update({alias.name for alias in command.aliases})
                 if command.command_type == 'alias':
                     command.follow().aliases.remove(command)
                 del space.custom_command_dict[name]
@@ -298,7 +298,7 @@ class DeepBlueSky(discord.Client):
         command_set = {new_name}
         while remainder:
             new_name, remainder = split_command(remainder)
-            command_set |= {new_name}
+            command_set.add(new_name)
         for name in command_set:
             if name in self.builtin_command_dict:
                 await self.send_to_channel(trigger.channel, 'Built-in commands cannot be taken.')
@@ -972,12 +972,16 @@ class ChannelSpace(Space):
     def get_space_type(self) -> str:
         return 'chan'
 
-    async def _query_users0(self, query: str) -> int:
+    async def _query_users0(self, query: str, strict: bool = False) -> int:
         rec = self.get_channel().recipients
         user_found = -1
-        for user in rec | {self.client.user}:
-            fullname = user.username.lower() + '#' + user.discriminator
-            if fullname.startswith(query.lower()):
+        query = query.lower()
+        for user in frozenset(rec).union({self.client.user}):
+            username = user.username.lower()
+            fullname = username + '#' + user.discriminator
+            displayname = user.display_name.lower()
+            user_match = fullname == query or username == query if strict else fullname.startswith(query) or displayname.startswith(query)
+            if user_match:
                 if user_found >= 0: return -2
                 else: user_found = user.id
         return user_found
@@ -1079,7 +1083,8 @@ class Command(abc.ABC):
             'author' : self.author,
             'crtime' : self.creation_time,
             'mtime' : self.modification_time,
-        } | self._get_dict0()
+            **self._get_dict0()
+        }
 
     @abc.abstractmethod
     def _get_dict0(self) -> Dict[str, Any]:
