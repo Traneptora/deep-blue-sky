@@ -639,7 +639,7 @@ class DeepBlueSky(discord.Client):
             return f'Unable to locate article: `{article}`'
 
     async def handle_wiki_lookup(self, trigger: discord.Message, extra_wikis: List[str] = []):
-        chunks = self.get_all_noncode_chunks(trigger.content)
+        chunks = get_all_noncode_chunks(trigger.content)
         articles = [re.findall(r'\[\[(.*?)\]\]', chunk) for chunk in chunks]
         articles = [article for chunk in articles for article in chunk if len(article.strip()) > 0]
         if len(articles) > 0:
