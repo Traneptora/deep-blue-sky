@@ -859,7 +859,7 @@ class Space(abc.ABC):
         self.custom_command_dict[name] = command
         return True
 
-    def load_commands(self, command_dict_list: List[dict[str, Any]]) -> bool:
+    def load_commands(self, command_dict_list: List[Dict[str, Any]]) -> bool:
         failed_all = False
         commands_to_add = command_dict_list[:]
         while len(commands_to_add) > 0 and not failed_all:
