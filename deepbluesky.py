@@ -49,7 +49,7 @@ def spongebob(text: str) -> str:
 
 def removeprefix(base: str, prefix: str) -> str:
     try:
-        return base.removeprefix(str)
+        return base.removeprefix(prefix)
     except AttributeError:
         pass
     if base.startswith(prefix):
@@ -58,7 +58,7 @@ def removeprefix(base: str, prefix: str) -> str:
 
 def removesuffix(base: str, suffix: str) -> str:
     try:
-        return base.removesuffix(str)
+        return base.removesuffix(prefix)
     except AttributeError:
         pass
     if base.endswith(suffix):
