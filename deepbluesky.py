@@ -140,10 +140,10 @@ class DeepBlueSky(discord.Client):
         usage = f'Usage: `{command_name} <new_prefix>'
         value, _ = split_command(command_predicate)
         if not value:
-            await self.send_to_channel(trigger.channel, f'New prefix may not be empty\n{usage}`')
+            await self.send_to_channel(trigger.channel, f'New prefix may not be empty\n{usage}')
             return False
         if not re.match(r'[a-z0-9_\-!.\.?]+', value):
-            await self.send_to_channel(trigger.channel, f'Invalid prefix: `{value}`\nOnly ASCII alphanumeric characters or `-_!.?` permitted\n{usage}`')
+            await self.send_to_channel(trigger.channel, f'Invalid prefix: `{value}`\nOnly ASCII alphanumeric characters or `-_!.?` permitted\n{usage}')
             return False
         space.command_prefix = value
         if space.save():
@@ -169,10 +169,10 @@ class DeepBlueSky(discord.Client):
         usage = f'Usage: `{command_name}` <command_name> <command_value | attachment>'
         new_name, new_value = split_command(command_predicate)
         if not new_name:
-            await self.send_to_channel(trigger.channel, f'Command name may not be empty\n{usage}`')
+            await self.send_to_channel(trigger.channel, f'Command name may not be empty\n{usage}')
             return False
         if not re.match(r'[a-z0-9_\-!\.?]+', new_name):
-            await self.send_to_channel(trigger.channel, f'Invalid command name: {new_name}\nOnly ASCII alphanumeric characters or `-_!.?` permitted\n{usage}`')
+            await self.send_to_channel(trigger.channel, f'Invalid command name: {new_name}\nOnly ASCII alphanumeric characters or `-_!.?` permitted\n{usage}')
             return False
         if self.find_command(space, new_name, follow_alias=False):
             await self.send_to_channel(trigger.channel, f'The command `{new_name}` already exists in this space. Use `updatecommand` instead.')
@@ -199,7 +199,7 @@ class DeepBlueSky(discord.Client):
         usage = f'Usage: `{command_name} <command_names...>'
         new_name, remainder = split_command(command_predicate)
         if not new_name:
-            await self.send_to_channel(trigger.channel, f'Command name may not be empty\n{usage}`')
+            await self.send_to_channel(trigger.channel, f'Command name may not be empty\n{usage}')
             return False
         if remainder and not space.is_moderator(trigger.author):
             await self.send_to_channel(trigger.channel, f'Only moderators may remove commands in bulk.')
@@ -243,10 +243,10 @@ class DeepBlueSky(discord.Client):
         usage = f'Usage: `{command_name} <command_name> <command_value | attachment>'
         new_name, new_value = split_command(command_predicate)
         if not new_name:
-            await self.send_to_channel(trigger.channel, f'Command name may not be empty\n{usage}`')
+            await self.send_to_channel(trigger.channel, f'Command name may not be empty\n{usage}')
             return False
         if not re.match(r'[a-z0-9_\-!\.?]+', new_name):
-            await self.send_to_channel(trigger.channel, f'Invalid command name: {new_name}\nOnly ASCII alphanumeric characters or `-_!.?` permitted\n{usage}`')
+            await self.send_to_channel(trigger.channel, f'Invalid command name: {new_name}\nOnly ASCII alphanumeric characters or `-_!.?` permitted\n{usage}')
             return False
         if new_name in self.builtin_command_dict:
             await self.send_to_channel(trigger.channel, 'Built-in commands cannot be updated.')
@@ -290,7 +290,7 @@ class DeepBlueSky(discord.Client):
         usage = f'Usage: `{command_name} <command_names...>'
         new_name, remainder = split_command(command_predicate)
         if not new_name:
-            await self.send_to_channel(trigger.channel, f'Command name may not be empty\n{usage}`')
+            await self.send_to_channel(trigger.channel, f'Command name may not be empty\n{usage}')
             return False
         if remainder and not space.is_moderator(trigger.author):
             await self.send_to_channel(trigger.channel, f'Only moderators may take commands in bulk.')
@@ -325,10 +325,10 @@ class DeepBlueSky(discord.Client):
         return success
 
     async def who_owns_command(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
-        usage = f'{command_name} <command_name>'
+        usage = f'{command_name} `<command_name>`'
         name, _ = split_command(command_predicate)
         if not name:
-            await self.send_to_channel(trigger.channel, f'Command name may not be empty\n{usage}`')
+            await self.send_to_channel(trigger.channel, f'Command name may not be empty\n{usage}')
             return False
         if name in self.builtin_command_dict:
             await self.send_to_channel(trigger.channel, f'The command `{name}` is built-in.')
@@ -544,14 +544,14 @@ class DeepBlueSky(discord.Client):
         usage = f'Usage: `{command_name}` <enable/disable>'
         value, _ = split_command(command_predicate)
         if not value:
-            await self.send_to_channel(trigger.channel, f'Choose enable or disable.\n{usage}`')
+            await self.send_to_channel(trigger.channel, f'Choose enable or disable.\n{usage}')
             return False
         if re.match(r'yes|on|true|enabled?', value):
             new_value = True
         elif re.match(r'no|off|false|disabled?', value):
             new_value = False
         else:
-            await self.send_to_channel(trigger.channel, f'Invalid enable/disable value.\n{usage}`')
+            await self.send_to_channel(trigger.channel, f'Invalid enable/disable value.\n{usage}')
             return False
         space.wikitext = new_value
         if space.save():
