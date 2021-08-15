@@ -516,7 +516,7 @@ class DeepBlueSky(discord.Client):
         try:
             member_obj = await guild.fetch_member(user_id)
         except discord.HTTPException:
-            self.logger.exception(f'Could not fetch member: {member_id}')
+            self.logger.exception(f'Could not fetch member: {user_id}')
             return None
         return member_obj
 
