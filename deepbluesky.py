@@ -348,7 +348,7 @@ class DeepBlueSky(discord.Client):
             await self.send_to_channel(trigger.channel, f'The command `{name}` is currently unowned.')
             return True
 
-    async def say(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str], processor: Callable[str, str] = identity) -> bool:
+    async def say(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str], processor: Callable[[str], str] = identity) -> bool:
         if not command_predicate:
             await self.send_to_channel(trigger.channel, f'Message may not be empty\nUsage: `{command_name} <message>`')
             return False
