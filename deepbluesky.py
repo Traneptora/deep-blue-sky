@@ -425,21 +425,21 @@ class DeepBlueSky(discord.Client):
         raise ValueError(msg)
 
     def get_dm_space(self, base_id: int) -> Space:
-        space_id = 'dm_' + base_id
+        space_id = f'dm_{base_id}'
         if space_id in self.spaces:
             return self.spaces[space_id]
         self.spaces[space_id] = DMSpace(client=self, base_id=base_id)
         return self.spaces[space_id]
 
     def get_channel_space(self, base_id: int) -> Space:
-        space_id = 'chan_' + base_id
+        space_id = f'chan_{base_id}'
         if space_id in self.spaces:
             return self.spaces[space_id]
         self.spaces[space_id] = ChannelSpace(client=self, base_id=base_id)
         return self.spaces[space_id]
 
     def get_guild_space(self, base_id: int) -> Space:
-        space_id = 'guild_' + base_id
+        space_id = f'guild_{base_id}'
         if space_id in self.spaces:
             return self.spaces[space_id]
         self.spaces[space_id] = GuildSpace(client=self, base_id=base_id)
