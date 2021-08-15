@@ -642,11 +642,6 @@ class DeepBlueSky(discord.Client):
             return True
         return False
 
-    # override this to change extra wikis
-    def get_extra_wikis(self) -> List[str]:
-        # pylint: disable=no-self-use
-        return []
-
     # events
 
     # return value
@@ -665,7 +660,7 @@ class DeepBlueSky(discord.Client):
             await self.process_command(trigger, space, command_string)
             return True
         if self.get_property(space, 'wikitext'):
-            return await self.handle_wiki_lookup(trigger, self.get_extra_wikis())
+            return await self.handle_wiki_lookup(trigger, self.extra_wikis)
         return False
 
     # setup stuff
@@ -740,7 +735,7 @@ class DeepBlueSky(discord.Client):
             'wikitext' : False,
             'space_id' : 'default',
         }
-
+        self.extra_wikis: List[str] = []
         self.spaces: Dict[str, Space] = {}
         self.load_space_overrides()
 
