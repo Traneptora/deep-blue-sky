@@ -73,14 +73,14 @@ def split_command(command_string: Optional[str]) -> Union[Tuple[str, Optional[st
     return (name, predicate)
 
 def chunk_message(message_string: str, chunk_delimiter: str) -> Tuple[List[str], List[str]]:
-        chunks = message_string.split(chunk_delimiter)
-        if len(chunks) % 2 == 0:
-            noncode_chunks = chunks[::2] + chunks[-1:]
-            code_chunks = chunks[1:-1:2]
-        else:
-            noncode_chunks = chunks[::2]
-            code_chunks = chunks[1::2]
-        return (noncode_chunks, code_chunks)
+    chunks = message_string.split(chunk_delimiter)
+    if len(chunks) % 2 == 0:
+        noncode_chunks = chunks[::2] + chunks[-1:]
+        code_chunks = chunks[1:-1:2]
+    else:
+        noncode_chunks = chunks[::2]
+        code_chunks = chunks[1::2]
+    return (noncode_chunks, code_chunks)
 
 def assemble_message(noncode_chunks: List[str], code_chunks: List[str], chunk_delimiter: str) -> str:
     if (len(noncode_chunks) + len(code_chunks)) % 2 == 0:
@@ -94,7 +94,7 @@ def get_all_noncode_chunks(message_string: str) -> List[str]:
     chunks, _ = zip(*[chunk_message(chunk, '`') for chunk in chunks])
     # zip will zip this into a tuple
     # cast to list to return a proper list
-    return list(chunks)
+    return [y for x in chunks for y in x]
 
 class Space(abc.ABC):
     pass
