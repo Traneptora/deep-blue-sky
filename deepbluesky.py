@@ -16,7 +16,7 @@ import sys
 import time
 
 from collections import OrderedDict
-from typing import Any, Callable, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import discord
 import requests
@@ -47,7 +47,7 @@ def spongebob(text: str) -> str:
             total += char
     return total
 
-def snowflake_list(snowflake_input: Optional[Union[str, discord.abc.Snowflake, int, list[Union[str, discord.abc.Snowflake, int]]]]) -> list[int]:
+def snowflake_list(snowflake_input: Optional[Union[str, discord.abc.Snowflake, int, List[Union[str, discord.abc.Snowflake, int]]]]) -> List[int]:
     if not snowflake_input:
         return []
 
@@ -72,7 +72,7 @@ def split_command(command_string: Optional[str]) -> Union[Tuple[str, Optional[st
     name = name[0:64].rstrip(':').lower() if name else None
     return (name, predicate)
 
-def chunk_message(message_string: str, chunk_delimiter: str) -> Tuple[list[str], list[str]]:
+def chunk_message(message_string: str, chunk_delimiter: str) -> Tuple[List[str], List[str]]:
         chunks = message_string.split(chunk_delimiter)
         if len(chunks) % 2 == 0:
             noncode_chunks = chunks[::2] + chunks[-1:]
@@ -82,14 +82,14 @@ def chunk_message(message_string: str, chunk_delimiter: str) -> Tuple[list[str],
             code_chunks = chunks[1::2]
         return (noncode_chunks, code_chunks)
 
-def assemble_message(noncode_chunks: list[str], code_chunks: list[str], chunk_delimiter: str) -> str:
+def assemble_message(noncode_chunks: List[str], code_chunks: List[str], chunk_delimiter: str) -> str:
     if (len(noncode_chunks) + len(code_chunks)) % 2 == 0:
         chunk_interleave = [val for pair in zip(noncode_chunks[:-2], code_chunks) for val in pair] + noncode_chunks[-2:]
     else:
         chunk_interleave = [val for pair in zip(noncode_chunks[:-1], code_chunks) for val in pair] + noncode_chunks[-1:]
     return chunk_delimiter.join(chunk_interleave)
 
-def get_all_noncode_chunks(message_string: str) -> list[str]:
+def get_all_noncode_chunks(message_string: str) -> List[str]:
     chunks, _ = chunk_message(message_string, '```')
     chunks, _ = zip(*[chunk_message(chunk, '`') for chunk in chunks])
     # zip will zip this into a tuple
@@ -623,7 +623,7 @@ class DeepBlueSky(discord.Client):
         else:
             return None
 
-    def lookup_wikis(self, article: str, extra_wikis: list[str]) -> str:
+    def lookup_wikis(self, article: str, extra_wikis: List[str]) -> str:
         for wiki in extra_wikis:
             wiki_url = self.lookup_mediawiki(wiki, article)
             if wiki_url: return wiki_url
@@ -638,7 +638,7 @@ class DeepBlueSky(discord.Client):
         else:
             return f'Unable to locate article: `{article}`'
 
-    async def handle_wiki_lookup(self, trigger: discord.Message, extra_wikis: list[str] = []):
+    async def handle_wiki_lookup(self, trigger: discord.Message, extra_wikis: List[str] = []):
         chunks = self.get_all_noncode_chunks(trigger.content)
         articles = [re.findall(r'\[\[(.*?)\]\]', chunk) for chunk in chunks]
         articles = [article for chunk in articles for article in chunk if len(article.strip()) > 0]
@@ -653,7 +653,7 @@ class DeepBlueSky(discord.Client):
     # return value
     # True: attempted to respond to the message
     # False: ignored the message
-    async def handle_message(self, trigger: discord.Message, extra_wikis: list[str] = []) -> bool:
+    async def handle_message(self, trigger: discord.Message, extra_wikis: List[str] = []) -> bool:
         if trigger.author == self.user:
             return False
         if trigger.author.bot:
@@ -735,12 +735,12 @@ class DeepBlueSky(discord.Client):
         ]
 
         self.builtin_command_dict |= OrderedDict([(command.name, command) for command in alias_list])
-        self.default_properties: dict[str, Any] = {
+        self.default_properties: Dict[str, Any] = {
             'command_prefix' : '--',
             'wikitext' : False,
         }
 
-        self.spaces: dict[str, Space] = {}
+        self.spaces: Dict[str, Space] = {}
 
         self.load_space_overrides()
 
@@ -783,13 +783,13 @@ class Space(abc.ABC):
 
     def __init__(self, client: DeepBlueSky):
         self.client = client
-        self.custom_command_dict: dict[str, Command] = OrderedDict([])
+        self.custom_command_dict: Dict[str, Command] = OrderedDict([])
         self.crtime: int = int(time.time())
         self.mtime: int = int(time.time())
         self.wikitext: Optional[bool] = None
         self.command_prefix: Optional[bool] = None
 
-    def get_all_properties(self) -> dict[str, Any]:
+    def get_all_properties(self) -> Dict[str, Any]:
         return {attr: getattr(self, attr) for attr in list(self.client.default_properties.keys()) + ['crtime', 'mtime']}
 
     def save(self, update_mtime: bool = True) -> bool:
@@ -825,13 +825,13 @@ class Space(abc.ABC):
             self.client.logger.exception(f'Unable to save command in space: {space_id}')
             return False
 
-    def load_properties(self, property_dict: dict[str, Any]):
+    def load_properties(self, property_dict: Dict[str, Any]):
         for attr in self.client.default_properties.keys():
             setattr(self, attr, property_dict.get(attr, None))
         for attr in ['crtime', 'mtime']:
             setattr(self, attr, property_dict.get(attr, int(time.time())))
 
-    def load_command(self, command_dict: dict[str, Any]) -> bool:
+    def load_command(self, command_dict: Dict[str, Any]) -> bool:
         # python 3.10: use patterns
         if command_dict['type'] != 'simple' and command_dict['type'] != 'alias':
             msg = f'Invalid custom command type: {comamnd_dict["type"]}'
@@ -859,7 +859,7 @@ class Space(abc.ABC):
         self.custom_command_dict[name] = command
         return True
 
-    def load_commands(self, command_dict_list: list[dict[str, Any]]) -> bool:
+    def load_commands(self, command_dict_list: List[dict[str, Any]]) -> bool:
         failed_all = False
         commands_to_add = command_dict_list[:]
         while len(commands_to_add) > 0 and not failed_all:
@@ -1072,7 +1072,7 @@ class Command(abc.ABC):
     def follow(self) -> Command:
         return self
 
-    def get_dict(self) -> dict[str, Any]:
+    def get_dict(self) -> Dict[str, Any]:
         return {
             'type' : self.command_type,
             'name' : self.name,
@@ -1082,7 +1082,7 @@ class Command(abc.ABC):
         } | self._get_dict0()
 
     @abc.abstractmethod
-    def _get_dict0(self) -> dict[str, Any]:
+    def _get_dict0(self) -> Dict[str, Any]:
         pass
 
     def __eq__(self, other) -> bool:
@@ -1118,7 +1118,7 @@ class CommandSimple(Command):
     def is_builtin(self) -> bool:
         return self.builtin
 
-    def _get_dict0(self) -> dict[str, Any]:
+    def _get_dict0(self) -> Dict[str, Any]:
         return {'value': self.value}
 
 class CommandAlias(Command):
@@ -1157,7 +1157,7 @@ class CommandAlias(Command):
     def follow(self) -> Command:
         return self.value
 
-    def _get_dict0(self) -> dict[str, Any]:
+    def _get_dict0(self) -> Dict[str, Any]:
         return {'value': self.value.name}
 
 class CommandFunction(Command):
@@ -1176,5 +1176,5 @@ class CommandFunction(Command):
     def get_help(self) -> str:
         return self.helpstring
 
-    def _get_dict0(self) -> dict[str, Any]:
+    def _get_dict0(self) -> Dict[str, Any]:
         raise RuntimeError('cannot get dict for functional command')
