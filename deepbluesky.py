@@ -17,7 +17,7 @@ import time
 
 from collections import OrderedDict
 from typing import Any, Callable, Optional, Union
-from typing import Dict, List, Set, Tuple
+from typing import Dict, FrozenSet, List, Tuple
 
 import discord
 import requests
@@ -860,7 +860,6 @@ class Space(abc.ABC):
         for attr in ['crtime', 'mtime']:
             setattr(self, attr, property_dict.get(attr, int(time.time())))
 
-
     def load_command(self, command_dict: Dict[str, Any]) -> bool:
         # python 3.10: use patterns
         if command_dict['type'] != 'simple' and command_dict['type'] != 'alias':
@@ -916,36 +915,27 @@ class Space(abc.ABC):
             return int(match.group(1))
 
         # username input
-        return await self._query_users0(query)
-
-    @abc.abstractmethod
-    async def _query_users0(self, query: str) -> int:
-        pass
-
-    @abc.abstractmethod
-    def is_moderator(self, user: discord.abc.User) -> bool:
-        pass
-
-# abc for DM and Channel spaces
-class PrivateSpace(Space):
-
-    def is_moderator(self, user: discord.abc.User) -> bool:
-        return True
-
-    def _query_userlist(self, userlist: Set[discord.User], query: str) -> int:
-        user_found = -1
+        user_id = -1
+        userlist = await self.get_userlist()
         query = query.lower()
-        for user in frozenset(userlist).union({self.client.user}):
-            username = user.username.lower()
-            fullname = username + '#' + user.discriminator
+        for user in frozenset({self.client.user}).union(userlist):
+            fullname = user.username.lower() + '#' + user.discriminator
             displayname = user.display_name.lower()
             if fullname.startswith(query) or displayname.startswith(query):
-                if user_found >= 0:
+                if user_id >= 0:
                     return -2
-                user_found = user.id
-        return user_found
+                user_id = user.id
+        return user_id
 
-class DMSpace(PrivateSpace):
+    @abc.abstractmethod
+    async def get_userlist(self) -> FrozenSet[discord.abc.User]:
+        pass
+
+    @abc.abstractmethod
+    def is_moderator(self, user: discord.abc.User) -> bool:
+        pass
+
+class DMSpace(Space):
 
     def __init__(self, client: DeepBlueSky, base_id: int):
         super().__init__(client=client, space_type='dm', base_id=base_id)
@@ -962,10 +952,13 @@ class DMSpace(PrivateSpace):
         self.recipient = recipient
         return self.recipient
 
-    async def _query_users0(self, query: str) -> int:
-        return self._query_userlist({await self.get_recipient()}, query)
+    def is_moderator(self, user: discord.abc.User) -> bool:
+        return True
 
-class ChannelSpace(PrivateSpace):
+    async def get_userlist(self) -> FrozenSet[discord.abc.User]:
+        return frozenset({await self.get_recipient()})
+
+class ChannelSpace(Space):
 
     def __init__(self, client: DeepBlueSky, base_id: int):
         super().__init__(client=client, space_type='chan', base_id=base_id)
@@ -986,9 +979,11 @@ class ChannelSpace(PrivateSpace):
         self.channel = channel
         return self.channel
 
-    async def _query_users0(self, query: str) -> int:
-        return self._query_userlist(frozenset((await self.get_channel()).recipients), query)
+    def is_moderator(self, user: discord.abc.User) -> bool:
+        return True
 
+    async def get_userlist(self) -> FrozenSet[discord.abc.User]:
+        return frozenset((await self.get_channel()).recipients)
 
 class GuildSpace(Space):
 
@@ -1010,13 +1005,8 @@ class GuildSpace(Space):
     def is_moderator(self, user: discord.abc.User) -> bool:
         return hasattr(user, 'guild_permissions') and user.guild_permissions.kick_members
 
-    async def _query_users0(self, query: str) -> int:
-        member_list = await (await self.get_guild()).query_members(query=query)
-        if len(member_list) == 0:
-            return -1
-        if len(member_list) > 1:
-            return -2
-        return member_list[0].id
+    async def get_userlist(self) -> FrozenSet[discord.abc.User]:
+        return frozenset((await self.get_guild()).members)
 
 class CommandAlias(Command):
     pass
