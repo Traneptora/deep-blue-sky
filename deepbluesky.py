@@ -389,11 +389,11 @@ class DeepBlueSky(discord.Client):
         return success
 
     async def take_command(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
-        usage = f'Usage: `{command_name}` <command_names...>'
+        usage = f'Usage: `{command_name} <command_names...>`'
         return await self._give_command0(trigger, space, command_name, remainder=command_predicate, verb='take', participle='taken', usage=usage, give_id=trigger.author.id)
 
     async def give_command(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
-        usage = f'Usage: `{command_name}` <user_spec> <command_names...>'
+        usage = f'Usage: `{command_name} <user_spec> <command_names...>`'
         if not command_predicate:
             await self.send_to_channel(trigger.channel, f'Provide user and command name\n{usage}')
             return False
@@ -916,7 +916,7 @@ class Space(abc.ABC):
             return int(match.group(1))
 
         # username input
-        return await self._query_users0(query.lower())
+        return await self._query_users0(query)
 
     @abc.abstractmethod
     async def _query_users0(self, query: str) -> int:
