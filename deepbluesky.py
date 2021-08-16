@@ -70,7 +70,7 @@ def relative_to_absolute_location(location: str, query_url: str) -> str:
     if location.startswith('/'):
         server = re.sub(r'^([a-zA-Z]+://[^/]*)/.*$', r'\1', query_url)
         return server + location
-    if re.match(r'[a-zA-Z]+://', location):
+    if re.match(r'^[a-zA-Z]+://', location):
         return location
     return re.sub(r'^(([^/]*/)+)[^/]*', r'\1', query_url) + '/' + location
 
@@ -144,7 +144,7 @@ def split_command(command_string: Optional[str]) -> Union[Tuple[str, Optional[st
     if not command_string:
         return (None, None)
     name, predicate, *_ = *command_string.split(maxsplit=1), None, None
-    name = name[0:64].rstrip(':').lower() if name else None
+    name = name[:64].rstrip(':,').lower() if name else None
     return (name, predicate)
 
 def chunk_message(message_string: str, chunk_delimiter: str) -> Tuple[List[str], List[str]]:
@@ -212,12 +212,12 @@ class DeepBlueSky(discord.Client):
         if not space.is_moderator(trigger.author):
             await self.send_to_channel(trigger.channel, 'Only moderators may do this.')
             return False
-        usage = f'Usage: `{command_name} <new_prefix>'
+        usage = f'Usage: `{command_name}` <new_prefix>'
         value, _ = split_command(command_predicate)
         if not value:
             await self.send_to_channel(trigger.channel, f'New prefix may not be empty\n{usage}')
             return False
-        if not re.match(r'[a-z0-9_\-!.\.?]+', value):
+        if not re.match(r'^[a-z0-9_\-!\.?]+$', value):
             await self.send_to_channel(trigger.channel, f'Invalid prefix: `{value}`\nOnly ASCII alphanumeric characters or `-_!.?` permitted\n{usage}')
             return False
         space.command_prefix = value
@@ -232,7 +232,7 @@ class DeepBlueSky(discord.Client):
             return False
         space.command_prefix = None
         success = space.save()
-        msg = f'Prefix for this space reset to the default, which is `{self.default_properties["wikitext"]}`' if success else 'Unknown error when saving properties'
+        msg = f'Prefix for this space reset to the default, which is `{self.default_properties["command_prefix"]}`' if success else 'Unknown error when saving properties'
         await self.send_to_channel(trigger.channel, msg)
         return success
 
@@ -242,8 +242,8 @@ class DeepBlueSky(discord.Client):
         if not new_name:
             await self.send_to_channel(trigger.channel, f'Command name may not be empty\n{usage}')
             return False
-        if not re.match(r'[a-z0-9_\-!\.?]+', new_name):
-            await self.send_to_channel(trigger.channel, f'Invalid command name: {new_name}\nOnly ASCII alphanumeric characters or `-_!.?` permitted\n{usage}')
+        if not re.match(r'^[a-z0-9_\-!\.?]+$', new_name):
+            await self.send_to_channel(trigger.channel, f'Invalid command name: `{new_name}`\nOnly ASCII alphanumeric characters or `-_!.?` permitted\n{usage}')
             return False
         if self.find_command(space, new_name, follow_alias=False):
             await self.send_to_channel(trigger.channel, f'The command `{new_name}` already exists in this space. Use `updatecommand` instead.')
@@ -265,7 +265,7 @@ class DeepBlueSky(discord.Client):
         return user is not None
 
     async def remove_command(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
-        usage = f'Usage: `{command_name} <command_names...>'
+        usage = f'Usage: `{command_name}` <command_names...>'
         new_name, remainder = split_command(command_predicate)
         if not new_name:
             await self.send_to_channel(trigger.channel, f'Command name may not be empty\n{usage}')
@@ -307,12 +307,12 @@ class DeepBlueSky(discord.Client):
         return success
 
     async def update_command(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
-        usage = f'Usage: `{command_name} <command_name> <command_value | attachment>'
+        usage = f'Usage: `{command_name}` <command_name> <command_value | attachment>'
         new_name, new_value = split_command(command_predicate)
         if not new_name:
             await self.send_to_channel(trigger.channel, f'Command name may not be empty\n{usage}')
             return False
-        if not re.match(r'[a-z0-9_\-!\.?]+', new_name):
+        if not re.match(r'^[a-z0-9_\-!\.?]+$', new_name):
             await self.send_to_channel(trigger.channel, f'Invalid command name: {new_name}\nOnly ASCII alphanumeric characters or `-_!.?` permitted\n{usage}')
             return False
         if new_name in self.builtin_command_dict:
@@ -352,7 +352,7 @@ class DeepBlueSky(discord.Client):
         return True
 
     async def take_command(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
-        usage = f'Usage: `{command_name} <command_names...>'
+        usage = f'Usage: `{command_name}` <command_names...>'
         new_name, remainder = split_command(command_predicate)
         if not new_name:
             await self.send_to_channel(trigger.channel, f'Command name may not be empty\n{usage}')
@@ -388,7 +388,7 @@ class DeepBlueSky(discord.Client):
         return success
 
     async def who_owns_command(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
-        usage = f'{command_name} `<command_name>`'
+        usage = f'Usage: `{command_name}` <command_name>'
         name, _ = split_command(command_predicate)
         if not name:
             await self.send_to_channel(trigger.channel, f'Command name may not be empty\n{usage}')
@@ -409,7 +409,7 @@ class DeepBlueSky(discord.Client):
         return True
 
     async def say(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str], processor: Callable[[str], str] = identity) -> bool:
-        msg = f'Message may not be empty\nUsage: `{command_name} <message>`' if not command_predicate else processor(command_predicate)
+        msg = f'Message may not be empty\nUsage: `{command_name}` <message>' if not command_predicate else processor(command_predicate)
         await self.send_to_channel(trigger.channel, msg)
         return command_predicate is not None
 
@@ -445,7 +445,7 @@ class DeepBlueSky(discord.Client):
         self.spaces[space_id] = GuildSpace(client=self, base_id=base_id)
         return self.spaces[space_id]
 
-    def get_space(self, space_id) -> Space:
+    def get_space(self, space_id: str) -> Space:
         if space_id in self.spaces:
             return self.spaces[space_id]
         if space_id.startswith('dm_'):
@@ -610,9 +610,9 @@ class DeepBlueSky(discord.Client):
         if not value:
             await self.send_to_channel(trigger.channel, f'Choose enable or disable.\n{usage}')
             return False
-        if re.match(r'yes|on|true|enabled?', value):
+        if re.match(r'^yes|on|true|enabled?$', value):
             new_value = True
-        elif re.match(r'no|off|false|disabled?', value):
+        elif re.match(r'^no|off|false|disabled?$', value):
             new_value = False
         else:
             await self.send_to_channel(trigger.channel, f'Invalid enable/disable value.\n{usage}')
@@ -829,8 +829,11 @@ class Space(abc.ABC):
     def load_properties(self, property_dict: Dict[str, Any]):
         for attr in self.client.default_properties.keys():
             setattr(self, attr, property_dict.get(attr, None))
+        # this mangles space_id so we re-set it
+        self.space_id = f'{self.space_type}_{self.base_id}'
         for attr in ['crtime', 'mtime']:
             setattr(self, attr, property_dict.get(attr, int(time.time())))
+
 
     def load_command(self, command_dict: Dict[str, Any]) -> bool:
         # python 3.10: use patterns
@@ -882,7 +885,7 @@ class Space(abc.ABC):
             pass
 
         # ping input
-        match = re.match(r'<@!?([0-9]+)>', query)
+        match = re.match(r'^<@!?([0-9]+)>', query)
         if match:
             return int(match.group(1))
 
