@@ -919,7 +919,7 @@ class Space(abc.ABC):
         userlist = await self.get_userlist()
         query = query.lower()
         for user in frozenset({self.client.user}).union(userlist):
-            fullname = user.username.lower() + '#' + user.discriminator
+            fullname = user.name.lower() + '#' + user.discriminator
             displayname = user.display_name.lower()
             if fullname.startswith(query) or displayname.startswith(query):
                 if user_id >= 0:
