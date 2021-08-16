@@ -58,7 +58,7 @@ def removeprefix(base: str, prefix: str) -> str:
 
 def removesuffix(base: str, suffix: str) -> str:
     try:
-        return base.removesuffix(prefix)
+        return base.removesuffix(suffix)
     except AttributeError:
         pass
     if base.endswith(suffix):
@@ -270,6 +270,7 @@ class DeepBlueSky(discord.Client):
         if not new_name:
             await self.send_to_channel(trigger.channel, f'Command name may not be empty\n{usage}')
             return False
+        # This is a security feature in case there's a bug
         if remainder and not space.is_moderator(trigger.author):
             await self.send_to_channel(trigger.channel, 'Only moderators may remove commands in bulk.')
             return False
@@ -351,14 +352,14 @@ class DeepBlueSky(discord.Client):
         await self.send_to_channel(trigger.channel, msg)
         return True
 
-    async def take_command(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
-        usage = f'Usage: `{command_name}` <command_names...>'
-        new_name, remainder = split_command(command_predicate)
+    async def _give_command0(self, trigger: discord.Message, space: Space, command_name: str, remainder: Optional[str], verb: str, participle: str, usage: str, give_id: int) -> bool:
+        new_name, remainder = split_command(remainder)
         if not new_name:
             await self.send_to_channel(trigger.channel, f'Command name may not be empty\n{usage}')
             return False
+        # This is a security feature in case there's a bug
         if remainder and not space.is_moderator(trigger.author):
-            await self.send_to_channel(trigger.channel, 'Only moderators may take commands in bulk.')
+            await self.send_to_channel(trigger.channel, f'Only moderators may {verb} commands in bulk.')
             return False
         command_set = {new_name}
         while remainder:
@@ -366,26 +367,50 @@ class DeepBlueSky(discord.Client):
             command_set.add(new_name)
         for name in command_set:
             if name in self.builtin_command_dict:
-                await self.send_to_channel(trigger.channel, 'Built-in commands cannot be taken.')
+                await self.send_to_channel(trigger.channel, f'Built-in commands cannot be {participle}.')
                 return False
             if name not in space.custom_command_dict:
                 await self.send_to_channel(trigger.channel, f'Unknown command in this space: `{name}`')
                 return False
             author_id = space.custom_command_dict[name].author
             if author_id != trigger.author.id and not space.is_moderator(trigger.author) and await self.user_exists(author_id, trigger.channel):
-                await self.send_to_channel(trigger.channel, f'The command `{name}` blongs to <@!{author_id}>. You cannot take it.')
+                await self.send_to_channel(trigger.channel, f'The command `{name}` blongs to <@!{author_id}>. You cannot {verb} it.')
                 return False
         success = True
         success_list = []
         for name in command_set:
-            space.custom_command_dict[name].author = trigger.author.id
+            space.custom_command_dict[name].author = give_id
             if space.save_command(name):
                 success_list += [name]
             else:
                 success = False
-        msg = f'Command ownership transfered successfully. You now own `{", ".join(success_list)}`.' if success else 'Unknown error when evaluating command'
+        msg = f'Command ownership transfered successfully for: `{", ".join(success_list)}`' if success else 'Unknown error when evaluating command'
         await self.send_to_channel(trigger.channel, msg)
         return success
+
+    async def take_command(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
+        usage = f'Usage: `{command_name}` <command_names...>'
+        return await self._give_command0(trigger, space, command_name, remainder=command_predicate, verb='take', participle='taken', usage=usage, give_id=trigger.author.id)
+
+    async def give_command(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
+        usage = f'Usage: `{command_name}` <user_spec> <command_names...>'
+        if not command_predicate:
+            await self.send_to_channel(trigger.channel, f'Provide user and command name\n{usage}')
+            return False
+        match = re.match(r'[^#]+#[0-9]{4}(?=\s+)', command_predicate)
+        if match:
+            user_str = match.group()
+            remainder = command_predicate[match.end():]
+        else:
+            user_str, remainder = split_command(command_predicate)
+        user_id = await space.query_users(user_str)
+        if user_id == -2:
+            await self.send_to_channel(trigger.channel, f'More than one user matched query: `{user_str}`')
+            return False
+        if user_id == -1:
+            await self.send_to_channel(trigger.channel, f'Could not find user: `{user_str}`')
+            return False
+        return await self._give_command0(trigger, space, command_name, remainder=remainder, verb='give', participle='given', usage=usage, give_id=user_id)
 
     async def who_owns_command(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
         usage = f'Usage: `{command_name}` <command_name>'
@@ -693,7 +718,8 @@ class DeepBlueSky(discord.Client):
             CommandFunction(name='removecommand', value=self.remove_command, helpstring='Remove a simple command and all of its aliases'),
             CommandFunction(name='updatecommand', value=self.update_command, helpstring='Change the value of a simple command'),
             CommandFunction(name='listcommands', value=self.list_commands, helpstring='List simple commands you own'),
-            CommandFunction(name='takecommand', value=self.take_command, helpstring='Gain ownership of a simple command'),
+            CommandFunction(name='takecommand', value=self.take_command, helpstring='Take ownership of a simple command'),
+            CommandFunction(name='givecommand', value=self.give_command, helpstring='Give ownership of a simple command'),
             CommandFunction(name='command', value=self.passthrough_command, helpstring='Call a command (this is for backwards compatibility)'),
             CommandFunction(name='list-all-commands', value=self.list_all_commands, helpstring='List all commands in this space (this is spammy!)'),
             CommandFunction(name='whoowns', value=self.who_owns_command, helpstring='Report who owns a simple command'),
