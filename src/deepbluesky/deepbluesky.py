@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+# deepbluesky.py
 
 # Deep Blue Sky python discord bot
 # This file doesn't actually create a bot
@@ -21,6 +21,11 @@ from typing import Dict, FrozenSet, List, Tuple
 
 import discord
 import requests
+
+from .space import Space
+from .space import ChannelSpace, DMSpace, GuildSpace
+from .command import Command
+from .command import CommandAlias, CommandFunction, CommandSimple
 
 def identity(arg: Any) -> Any:
     return arg
@@ -757,9 +762,9 @@ class DeepBlueSky(discord.Client):
 
         self.builtin_command_dict.update(OrderedDict([(command.name, command) for command in alias_list]))
         self.default_properties: Dict[str, Any] = {
+            'space_id' : 'default',
             'command_prefix' : '--',
             'wikitext' : False,
-            'space_id' : 'default',
         }
         self.extra_wikis: List[str] = []
         self.spaces: Dict[str, Space] = {}
@@ -783,11 +788,18 @@ class DeepBlueSky(discord.Client):
 
 
     # connect logic
+    
+    # this is an event handler
+    # because we subclass discord.Client
+    async def on_ready(self):
+        self.logger.info(f'Logged in as {self.user}')
+        game = discord.Game(self.default_properties['command_prefix'])
+        await self.change_presence(status=discord.Status.online, activity=game)
 
-    def run(self, *args, **kwargs):
-        token = None
-        with open('oauth_token', 'r', encoding='UTF-8') as token_file:
-            token = token_file.read()
+    def run(self, token=None):
+        if not token:
+            with open('oauth_token', 'r', encoding='UTF-8') as token_file:
+                token = token_file.read()            
         if not token or token == '':
             self.logger.critical('Error reading OAuth Token')
             sys.exit(1)
@@ -798,384 +810,3 @@ class DeepBlueSky(discord.Client):
             self.loop.run_until_complete(self.start(token, reconnect=True))
         finally:
             self.loop.close()
-
-
-class Space(abc.ABC):
-
-    # pylint: disable=function-redefined
-
-    def __init__(self, client: DeepBlueSky, space_type: str, base_id: int):
-        self.client: DeepBlueSky = client
-        self.base_id: int = base_id
-        self.custom_command_dict: Dict[str, Command] = OrderedDict([])
-        self.crtime: int = int(time.time())
-        self.mtime: int = int(time.time())
-        self.wikitext: Optional[bool] = None
-        self.command_prefix: Optional[bool] = None
-        self.space_type: str = space_type
-        self.space_id: str = f'{space_type}_{base_id}'
-
-    def __str__(self) -> str:
-        return self.space_id
-
-    def get_all_properties(self) -> Dict[str, Any]:
-        return {attr: getattr(self, attr) for attr in list(self.client.default_properties.keys()) + ['crtime', 'mtime']}
-
-    def save(self, update_mtime: bool = True) -> bool:
-        if update_mtime:
-            self.mtime = int(time.time())
-        space_properties = self.get_all_properties()
-        dirname = f'storage/{self.space_id}'
-        try:
-            os.makedirs(dirname, mode=0o755, exist_ok=True)
-            with open(f'{dirname}/space.json', 'w', encoding='UTF-8') as json_file:
-                json.dump(space_properties, json_file)
-        except IOError:
-            self.client.logger.exception(f'Unable to save space: {self.space_id}')
-            return False
-        return True
-
-    def save_command(self, command_name: str, update_mtime: bool = True) -> bool:
-        dirname=f'storage/{self.space_id}/commands'
-        command_json_fname = f'{dirname}/{command_name}.json'
-        try:
-            os.makedirs(dirname, mode=0o755, exist_ok=True)
-            if command_name in self.custom_command_dict:
-                command = self.custom_command_dict[command_name]
-                command.modification_time = int(time.time())
-                with open(command_json_fname, 'w', encoding='UTF-8') as json_file:
-                    json.dump(command.get_dict(), json_file)
-            elif os.path.isfile(command_json_fname):
-                os.remove(command_json_fname)
-            return True
-        except IOError:
-            self.client.logger.exception(f'Unable to save command in space: {self.space_id}')
-            return False
-
-    def load_properties(self, property_dict: Dict[str, Any]):
-        for attr in self.client.default_properties.keys():
-            setattr(self, attr, property_dict.get(attr, None))
-        # this mangles space_id so we re-set it
-        self.space_id = f'{self.space_type}_{self.base_id}'
-        for attr in ['crtime', 'mtime']:
-            setattr(self, attr, property_dict.get(attr, int(time.time())))
-
-    def load_command(self, command_dict: Dict[str, Any]) -> bool:
-        # python 3.10: use patterns
-        if command_dict['type'] != 'simple' and command_dict['type'] != 'alias':
-            msg = f'Invalid custom command type: {command_dict["type"]}'
-            self.client.logger.error(msg)
-            raise ValueError(msg)
-
-        author = command_dict['author']
-        name = command_dict['name']
-        crtime = command_dict['crtime']
-        mtime = command_dict['mtime']
-        value = command_dict['value']
-
-        if command_dict['type'] == 'simple':
-            command = CommandSimple(name=name, author=author, creation_time=crtime, modification_time=mtime, value=value)
-        else:
-            # command_type must equal 'alias'
-            if value in self.client.builtin_command_dict:
-                value = self.client.builtin_command_dict[value]
-            elif value in self.custom_command_dict:
-                value = self.custom_command_dict[value]
-            else:
-                self.client.logger.warning(f'cant add alias before its target. name: {name}, value: {value}')
-                return False
-            command = CommandAlias(name=name, author=author, creation_time=crtime, modification_time=mtime, value=value, builtin=False)
-        self.custom_command_dict[name] = command
-        return True
-
-    def load_commands(self, command_dict_list: List[Dict[str, Any]]) -> bool:
-        failed_all = False
-        commands_to_add = command_dict_list[:]
-        while len(commands_to_add) > 0 and not failed_all:
-            failed_all = True
-            for command_dict in commands_to_add[:]:
-                if self.load_command(command_dict):
-                    commands_to_add.remove(command_dict)
-                    failed_all = False
-        if failed_all:
-            self.client.logger.error(f'Broken aliases detected in space: {self.space_id}')
-        return not failed_all
-
-    async def query_users(self, query: str) -> int:
-        # user ID input
-        try:
-            user_id = int(query)
-            return user_id
-        except ValueError:
-            pass
-
-        # ping input
-        match = re.match(r'^<@!?([0-9]+)>', query)
-        if match:
-            return int(match.group(1))
-
-        # username input
-        user_id = -1
-        userlist = await self.get_userlist()
-        query = query.lower()
-        for user in frozenset({self.client.user}).union(userlist):
-            fullname = user.name.lower() + '#' + user.discriminator
-            displayname = user.display_name.lower()
-            if fullname.startswith(query) or displayname.startswith(query):
-                if user_id >= 0:
-                    return -2
-                user_id = user.id
-        return user_id
-
-    @abc.abstractmethod
-    async def get_userlist(self) -> FrozenSet[discord.abc.User]:
-        pass
-
-    @abc.abstractmethod
-    def is_moderator(self, user: discord.abc.User) -> bool:
-        pass
-
-class DMSpace(Space):
-
-    def __init__(self, client: DeepBlueSky, base_id: int):
-        super().__init__(client=client, space_type='dm', base_id=base_id)
-        self.recipient: Optional[discord.User] = None
-
-    async def get_recipient(self) -> discord.User:
-        if self.recipient:
-            return self.recipient
-        recipient = self.client.get_or_fetch_user(self.base_id)
-        if not recipient:
-            msg = f'Cannot find user: {self.base_id}'
-            self.client.logger.critical(msg)
-            raise RuntimeError(msg)
-        self.recipient = recipient
-        return self.recipient
-
-    def is_moderator(self, user: discord.abc.User) -> bool:
-        return True
-
-    async def get_userlist(self) -> FrozenSet[discord.abc.User]:
-        return frozenset({await self.get_recipient()})
-
-class ChannelSpace(Space):
-
-    def __init__(self, client: DeepBlueSky, base_id: int):
-        super().__init__(client=client, space_type='chan', base_id=base_id)
-        self.channel: Optional[discord.GroupChannel] = None
-
-    async def get_channel(self) -> discord.GroupChannel:
-        if self.channel:
-            return self.channel
-        channel = self.client.get_or_fetch_channel(self.base_id)
-        if not channel:
-            msg = f'Cannot find channel: {self.base_id}'
-            self.client.logger.critical(msg)
-            raise RuntimeError(msg)
-        if channel is not discord.GroupChannel:
-            msg = f'Channel is not a GroupChannel: {self.base_id}'
-            self.client.logger.critical(msg)
-            raise RuntimeError(msg)
-        self.channel = channel
-        return self.channel
-
-    def is_moderator(self, user: discord.abc.User) -> bool:
-        return True
-
-    async def get_userlist(self) -> FrozenSet[discord.abc.User]:
-        return frozenset((await self.get_channel()).recipients)
-
-class GuildSpace(Space):
-
-    def __init__(self, client: DeepBlueSky, base_id: int):
-        super().__init__(client=client, space_type='guild', base_id=base_id)
-        self.guild: Optional[discord.Guild] = None
-
-    async def get_guild(self) -> discord.Guild:
-        if self.guild:
-            return self.guild
-        guild = await self.client.get_or_fetch_guild(self.base_id)
-        if not guild:
-            msg = f'Cannot find guild: {self.base_id}'
-            self.client.logger.critical(msg)
-            raise RuntimeError(msg)
-        self.guild = guild
-        return self.guild
-
-    def is_moderator(self, user: discord.abc.User) -> bool:
-        return hasattr(user, 'guild_permissions') and user.guild_permissions.kick_members
-
-    async def get_userlist(self) -> FrozenSet[discord.abc.User]:
-        return frozenset((await self.get_guild()).members)
-
-class CommandAlias(Command):
-    pass
-
-class Command(abc.ABC):
-
-    # pylint: disable=function-redefined
-
-    def __init__(self, name: str, author: Optional[int], command_type: str, creation_time: Optional[int], modification_time: Optional[int]):
-        self.name = name
-        self.author = author
-        self.aliases = []
-        self.command_type = command_type
-        self.creation_time = creation_time
-        self.modification_time = modification_time
-        self.space = None
-
-    # the returned value is the success bool
-    # the command message has already been sent to the channel
-    @abc.abstractmethod
-    async def _invoke0(self, trigger: discord.Message, space: Space, name_used: str, command_predicate: Optional[str]) -> bool:
-        pass
-
-    async def invoke(self, trigger: discord.Message, space: Space, name_used: str, command_predicate: Optional[str]) -> bool:
-        if self.space and self.space != space:
-            # This should not happen
-            space.client.logger.error(f'Command {self.name} owned by another space: {self.space}, not {space}')
-            return False
-        if await self.can_call(trigger, space):
-            try:
-                result = await self._invoke0(trigger, space, name_used, command_predicate)
-                if result:
-                    space.client.logger.info(f'Command succeeded, author: {trigger.author.id}, name: {self.name}')
-                else:
-                    space.client.logger.info(f'Command failed, author: {trigger.author.id}, name: {self.name}')
-            # pylint: disable=broad-except
-            except Exception as ex:
-                space.client.logger.critical(f'Unexpected exception during command invocation: {str(ex)}', exc_info=True)
-                return False
-        else:
-            space.client.logger.warning(f'User {trigger.author.id} illegally attempted command {self.name}')
-            return False
-
-    @abc.abstractmethod
-    def get_help(self) -> str:
-        pass
-
-    @abc.abstractmethod
-    def is_builtin(self) -> bool:
-        pass
-
-    async def can_call(self, trigger: discord.Message, space: Space) -> bool:
-        return True
-
-    def canonical(self, path: Optional[list] = None) -> Command:
-        return self
-
-    def follow(self) -> Command:
-        return self
-
-    def get_dict(self) -> Dict[str, Any]:
-        return {
-            'type' : self.command_type,
-            'name' : self.name,
-            'author' : self.author,
-            'crtime' : self.creation_time,
-            'mtime' : self.modification_time,
-            **self._get_dict0()
-        }
-
-    @abc.abstractmethod
-    def _get_dict0(self) -> Dict[str, Any]:
-        pass
-
-    def __eq__(self, other) -> bool:
-        if not other:
-            return False
-        if id(self) == id(other):
-            return True
-        return self.name == other.name and self.space == other.space and self.command_type == other.command_type
-
-    def __hash__(self) -> int:
-        return hash((self.name, self.space, self.command_type))
-
-class CommandSimple(Command):
-
-    def __init__(self, name: str, value: str, author: Optional[int] = None,  creation_time: Optional[int] = None, modification_time: Optional[int] = None, builtin: bool = False, helpstring: Optional[str] = None):
-        super().__init__(name=name, author=author, command_type='simple', creation_time=creation_time, modification_time=modification_time)
-        self.value = value
-        self.builtin = builtin
-        self.helpstring = helpstring if helpstring else 'a simple command replies with its value'
-
-    # override
-    async def _invoke0(self, trigger: discord.Message, space: Space, name_used: str, command_predicate: Optional[str]) -> bool:
-        try:
-            await space.client.send_to_channel(trigger.channel, self.value)
-        except discord.Forbidden:
-            space.client.logger.error(f'Insufficient permissions to send to channel. id: {trigger.channel.id}, name: {self.name}')
-            return False
-        return True
-
-    def get_help(self) -> str:
-        return f'Reply with {self.value}' if self.is_builtin() else self.helpstring
-
-    def is_builtin(self) -> bool:
-        return self.builtin
-
-    def _get_dict0(self) -> Dict[str, Any]:
-        return {'value': self.value}
-
-class CommandAlias(Command):
-
-    # pylint: disable=function-redefined
-
-    def __init__(self, name: str, value: Command, author: Optional[int] = None, creation_time: Optional[int] = None, modification_time: Optional[int] = None, builtin: Optional[bool] = None):
-        super().__init__(name=name, author=author, command_type='alias', creation_time=creation_time, modification_time=creation_time)
-        self.value = value
-        self.value.aliases.append(self)
-        self.builtin = builtin if builtin is not None else self.value.is_builtin()
-
-    async def _invoke0(self, trigger: discord.Message, space: Space, name_used: str, command_predicate: Optional[str]) -> bool:
-        return await self.canonical().invoke(trigger, space, name_used, command_predicate)
-
-    def get_help(self) -> str:
-        return f'alias for `{self.value.name}`'
-
-    def is_builtin(self) -> bool:
-        return self.builtin
-
-    # Axiom of Regularity
-    # https://en.wikipedia.org/wiki/Axiom_of_regularity
-    # prevent infinte alias loops
-    # This should never fail because alias creation requires another command object
-    # but failsafes are good
-    def check_regularity(self, path: Optional[list] = None) -> bool:
-        if not path:
-            path = []
-        if self in path:
-            return False
-        return self.value is not CommandAlias or self.value.check_regularity(path + [self])
-
-    def canonical(self, path: Optional[list] = None) -> Command:
-        if not path:
-            path = []
-        if self in path:
-            raise RuntimeError(f'alias cycle detected: {self.name}, {path}')
-        return self.value.canonical(path + [self])
-
-    def follow(self) -> Command:
-        return self.value
-
-    def _get_dict0(self) -> Dict[str, Any]:
-        return {'value': self.value.name}
-
-class CommandFunction(Command):
-
-    def __init__(self, name: str, value: Callable[[discord.Message, Space, str, str], bool], helpstring: str):
-        super().__init__(name=name, author=None, command_type='function', creation_time=None, modification_time=None)
-        self.value = value
-        self.helpstring = helpstring
-
-    def is_builtin(self) -> bool:
-        return True
-
-    async def _invoke0(self, trigger: discord.Message, space: Space, name_used: str, command_predicate: Optional[str]) -> bool:
-        return await self.value(trigger, space, name_used, command_predicate)
-
-    def get_help(self) -> str:
-        return self.helpstring
-
-    def _get_dict0(self) -> Dict[str, Any]:
-        raise RuntimeError('cannot get dict for functional command')
