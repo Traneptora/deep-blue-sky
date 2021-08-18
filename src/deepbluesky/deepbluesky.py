@@ -695,14 +695,14 @@ class DeepBlueSky(discord.Client):
 
     # setup stuff
 
-    def __init__(self, *args, bot_name: str, **kwargs):
+    def __init__(self, *args, bot_name: str, bot_storage_area: str = '~/.config/deep-blue-sky', **kwargs):
 
         self.bot_name = bot_name
-        bot_dir = os.path.expanduser(f'~/.config/{bot_name}')
-        os.makedirs(bot_dir, mode=0o755, exist_ok=True)
-        os.chdir(bot_dir)
+        self.bot_dir = os.path.expanduser(f'{bot_storage_area}/{bot_name}')
+        os.makedirs(self.bot_dir, mode=0o755, exist_ok=True)
+        os.chdir(self.bot_dir)
         for subdir in 'feed', 'storage':
-            os.makedirs(f'{bot_dir}/{subdir}', mode=0o755, exist_ok=True)
+            os.makedirs(f'{self.bot_dir}/{subdir}', mode=0o755, exist_ok=True)
 
         self.logger = logging.getLogger('discord')
         self.logger.setLevel(logging.INFO)
