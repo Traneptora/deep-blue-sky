@@ -801,7 +801,7 @@ class DeepBlueSky(discord.Client):
     # because we subclass discord.Client
     async def on_ready(self):
         self.logger.info(f'Logged in as {self.user}')
-        game = discord.Game(self.default_properties['command_prefix'])
+        game = discord.Game(self.default_properties['command_prefix'] + 'help')
         await self.change_presence(status=discord.Status.online, activity=game)
 
     def run(self, token=None):
