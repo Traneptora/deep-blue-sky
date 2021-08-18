@@ -695,7 +695,15 @@ class DeepBlueSky(discord.Client):
 
     # setup stuff
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, bot_name: str, **kwargs):
+
+        self.bot_name = bot_name
+        bot_dir = os.path.expanduser(f'~/.config/{bot_name}')
+        os.makedirs(bot_dir, mode=0o755, exist_ok=True)
+        os.chdir(bot_dir)
+        for subdir in 'feed', 'storage':
+            os.makedirs(f'{bot_dir}/{subdir}', mode=0o755, exist_ok=True)
+
         self.logger = logging.getLogger('discord')
         self.logger.setLevel(logging.INFO)
         # pylint: disable=consider-using-with
@@ -797,6 +805,7 @@ class DeepBlueSky(discord.Client):
         await self.change_presence(status=discord.Status.online, activity=game)
 
     def run(self, token=None):
+
         if not token:
             with open('oauth_token', 'r', encoding='UTF-8') as token_file:
                 token = token_file.read()            
@@ -804,7 +813,7 @@ class DeepBlueSky(discord.Client):
             self.logger.critical('Error reading OAuth Token')
             sys.exit(1)
 
-        self.logger.info('Beginning connection.')
+        self.logger.info(f'Beginning connection as {self.bot_name}')
 
         try:
             self.loop.run_until_complete(self.start(token, reconnect=True))
