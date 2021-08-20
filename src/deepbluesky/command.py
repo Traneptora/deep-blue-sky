@@ -3,7 +3,7 @@ from __future__ import annotations
 import abc
 
 from typing import TYPE_CHECKING, Any, Optional
-from typing import Dict
+from typing import Awaitable, Callable, Dict, List
 
 import discord
 
@@ -17,7 +17,7 @@ class Command(abc.ABC):
     def __init__(self, name: str, author: Optional[int], command_type: str, creation_time: Optional[int], modification_time: Optional[int], space: Optional[Space] = None):
         self.name = name
         self.author = author
-        self.aliases = []
+        self.aliases: List[CommandAlias] = []
         self.command_type = command_type
         self.creation_time = creation_time
         self.modification_time = modification_time
@@ -41,6 +41,7 @@ class Command(abc.ABC):
                     space.client.logger.info(f'Command succeeded, author: {trigger.author.id}, name: {self.name}')
                 else:
                     space.client.logger.info(f'Command failed, author: {trigger.author.id}, name: {self.name}')
+                return True
             # pylint: disable=broad-except
             except Exception as ex:
                 space.client.logger.critical(f'Unexpected exception during command invocation: {str(ex)}', exc_info=True)
@@ -162,7 +163,7 @@ class CommandAlias(Command):
 
 class CommandFunction(Command):
 
-    def __init__(self, name: str, value: Callable[[discord.Message, Space, str, str], bool], helpstring: str):
+    def __init__(self, name: str, value: Callable[[discord.Message, Space, str, Optional[str]], Awaitable[bool]], helpstring: str):
         super().__init__(name=name, author=None, command_type='function', creation_time=None, modification_time=None)
         self.value = value
         self.helpstring = helpstring

@@ -1,10 +1,13 @@
 # space.py
 from __future__ import annotations
 import abc
+import json
+import os
+import re
 import time
 
 from typing import TYPE_CHECKING, Any, Optional
-from typing import Dict, OrderedDict
+from typing import Dict, FrozenSet, List, OrderedDict
 
 import discord
 from .command import Command, CommandAlias, CommandSimple
@@ -23,7 +26,7 @@ class Space(abc.ABC):
         self.crtime: int = int(time.time())
         self.mtime: int = int(time.time())
         self.wikitext: Optional[bool] = None
-        self.command_prefix: Optional[bool] = None
+        self.command_prefix: Optional[str] = None
         self.space_type: str = space_type
         self.space_id: str = f'{space_type}_{base_id}'
 
@@ -96,7 +99,7 @@ class Space(abc.ABC):
         value = command_dict['value']
 
         if command_dict['type'] == 'simple':
-            command = CommandSimple(name=name, author=author, creation_time=crtime, modification_time=mtime, value=value)
+            self.custom_command_dict[name] = CommandSimple(name=name, author=author, creation_time=crtime, modification_time=mtime, value=value)
         else:
             # command_type must equal 'alias'
             if value in self.client.builtin_command_dict:
@@ -106,8 +109,7 @@ class Space(abc.ABC):
             else:
                 self.client.logger.warning(f'cant add alias before its target. name: {name}, value: {value}')
                 return False
-            command = CommandAlias(name=name, author=author, creation_time=crtime, modification_time=mtime, value=value, builtin=False)
-        self.custom_command_dict[name] = command
+            self.custom_command_dict[name] = CommandAlias(name=name, author=author, creation_time=crtime, modification_time=mtime, value=value, builtin=False)
         return True
 
     def load_commands(self, command_dict_list: List[Dict[str, Any]]) -> bool:
@@ -194,7 +196,7 @@ class ChannelSpace(Space):
             msg = f'Cannot find channel: {self.base_id}'
             self.client.logger.critical(msg)
             raise RuntimeError(msg)
-        if not isinstance(channel, GroupChannel):
+        if not isinstance(channel, discord.GroupChannel):
             msg = f'Channel is not a GroupChannel: {self.base_id}'
             self.client.logger.critical(msg)
             raise RuntimeError(msg)

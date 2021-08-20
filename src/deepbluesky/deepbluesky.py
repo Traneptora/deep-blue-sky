@@ -16,8 +16,8 @@ import sys
 import time
 
 from collections import OrderedDict
-from typing import Any, Callable, Optional, Union
-from typing import Dict, FrozenSet, List, Tuple
+from typing import Any, Callable, Literal, Optional, Union
+from typing import Dict, FrozenSet, Iterable, List, Tuple
 
 import discord
 import requests
@@ -79,7 +79,7 @@ def relative_to_absolute_location(location: str, query_url: str) -> str:
         return location
     return re.sub(r'^(([^/]*/)+)[^/]*', r'\1', query_url) + '/' + location
 
-def lookup_tvtropes(article: str) -> Tuple[bool, Optional[str]]:
+def lookup_tvtropes(article: str) -> Tuple[bool, str]:
     parts = re.sub(r'[^\w/]', '', article).split('/', maxsplit=1)
     if len(parts) > 1:
         namespace = parts[0]
@@ -96,7 +96,7 @@ def lookup_tvtropes(article: str) -> Tuple[bool, Optional[str]]:
     result.encoding = 'UTF-8'
     if re.search(r"<div>Inexact title\. See the list below\. We don't have an article named <b>{}</b>/{}, exactly\. We do have:".format(namespace, title), result.text, flags=re.IGNORECASE):
         return (False, result.url)
-    return (True, result.url) if result.ok else (False, None)
+    return (True, result.url) if result.ok else (False, '')
 
 def lookup_mediawiki(mediawiki_base: str, article: str) -> Optional[str]:
     parts = article.split('/')
@@ -131,25 +131,27 @@ def snowflake_list(snowflake_input: Optional[Union[str, discord.abc.Snowflake, i
         return []
 
     try:
-        snowflake_input = int(snowflake_input)
+        snowflake_input = int(snowflake_input) # type: ignore
     # intentionally not catching ValueError here, since string IDs should cast to int
     # TypeError means not a snowflake, string, or int, so probably an iterable
     except TypeError:
         pass
 
     try:
-        snowflake_input = list(snowflake_input)
+        snowflake_input = list(snowflake_input) # type: ignore
     # probably an integer
     except TypeError:
         snowflake_input = [snowflake_input]
 
-    return [int(snowflake) for snowflake in snowflake_input]
+    return [int(snowflake) for snowflake in snowflake_input] # type: ignore
 
-def split_command(command_string: Optional[str]) -> Union[Tuple[str, Optional[str]], Tuple[None, None]]:
+def split_command(command_string: Optional[str]) -> Tuple[str, Optional[str]]:
     if not command_string:
-        return (None, None)
-    name, predicate, *_ = *command_string.split(maxsplit=1), None, None
-    name = name[:64].rstrip(':,').lower() if name else None
+        return ('', None)
+    sname: Optional[str]
+    predicate: Optional[str]
+    sname, predicate, *_ = *command_string.split(maxsplit=1), None, None
+    name: str = sname[:64].rstrip(':,').lower() if sname else ''
     return (name, predicate)
 
 def chunk_message(message_string: str, chunk_delimiter: str) -> Tuple[List[str], List[str]]:
@@ -170,16 +172,12 @@ def assemble_message(noncode_chunks: List[str], code_chunks: List[str], chunk_de
     return chunk_delimiter.join(chunk_interleave)
 
 def get_all_noncode_chunks(message_string: str) -> List[str]:
+    chunks: Iterable[str]
     chunks, _ = chunk_message(message_string, '```')
     chunks, _ = zip(*[chunk_message(chunk, '`') for chunk in chunks])
     # zip will zip this into a tuple
     # cast to list to return a proper list
     return [y for x in chunks for y in x]
-
-class Space(abc.ABC):
-    pass
-class Command(abc.ABC):
-    pass
 
 class DeepBlueSky(discord.Client):
 
@@ -194,6 +192,7 @@ class DeepBlueSky(discord.Client):
     # command functions
 
     async def send_help(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
+        wanted_help: str
         wanted_help, _ = split_command(command_predicate)
         if not wanted_help:
             if space.is_moderator(trigger.author):
@@ -218,6 +217,7 @@ class DeepBlueSky(discord.Client):
             await self.send_to_channel(trigger.channel, 'Only moderators may do this.')
             return False
         usage = f'Usage: `{command_name}` <new_prefix>'
+        value: str
         value, _ = split_command(command_predicate)
         if not value:
             await self.send_to_channel(trigger.channel, f'New prefix may not be empty\n{usage}')
@@ -291,7 +291,7 @@ class DeepBlueSky(discord.Client):
                 await self.send_to_channel(trigger.channel, f'Unknown command in this space: `{name}`')
                 return False
             author_id = space.custom_command_dict[name].author
-            if author_id != trigger.author.id and not space.is_moderator(trigger.author) and await self.user_exists(author_id, trigger.channel):
+            if author_id and author_id != trigger.author.id and not space.is_moderator(trigger.author) and await self.user_exists(author_id, trigger.channel):
                 await self.send_to_channel(trigger.channel, f'The command `{name}` blongs to <@!{author_id}>. You cannot remove it.')
                 return False
         success = True
@@ -300,7 +300,7 @@ class DeepBlueSky(discord.Client):
             for name in list(command_set):
                 command = space.custom_command_dict[name]
                 command_set.update({alias.name for alias in command.aliases})
-                if command.command_type == 'alias':
+                if isinstance(command, CommandAlias):
                     command.follow().aliases.remove(command)
                 del space.custom_command_dict[name]
                 if space.save_command(name):
@@ -328,7 +328,7 @@ class DeepBlueSky(discord.Client):
             await self.send_to_channel(trigger.channel, f'Unknown command in this space: `{new_name}`')
             return False
         command = space.custom_command_dict[new_name]
-        if command.author != trigger.author.id and not space.is_moderator(trigger.author) and await self.user_exists(command.author, trigger.channel):
+        if command.author and command.author != trigger.author.id and not space.is_moderator(trigger.author) and await self.user_exists(command.author, trigger.channel):
             await self.send_to_channel(trigger.channel, f'The command `{command.name}` blongs to <@!{command.author}>. You cannot update it.')
             return False
         lines = [x.strip() for x in [new_value] if x] + [attachment.url for attachment in trigger.attachments]
@@ -336,7 +336,12 @@ class DeepBlueSky(discord.Client):
             await self.send_to_channel(trigger.channel, f'Command value may not be empty\n{usage}')
             return False
         new_value = '\n'.join(lines)
-        command.value = new_value
+        if isinstance(command, CommandSimple):
+            command.value = new_value
+        else:
+            self.logger.critical(f'custom command not simple: {command}')
+            await self.send_to_channel(trigger.channel, 'Unknown error when evaluating command')
+            return False
         success = space.save_command(new_name)
         msg = f'Command updated successfully. Try it with: `{self.get_property(space, "command_prefix")}{new_name}`' if success else 'Unknown error when evaluating command'
         await self.send_to_channel(trigger.channel, msg)
@@ -378,7 +383,7 @@ class DeepBlueSky(discord.Client):
                 await self.send_to_channel(trigger.channel, f'Unknown command in this space: `{name}`')
                 return False
             author_id = space.custom_command_dict[name].author
-            if author_id != trigger.author.id and not space.is_moderator(trigger.author) and await self.user_exists(author_id, trigger.channel):
+            if author_id and author_id != trigger.author.id and not space.is_moderator(trigger.author) and await self.user_exists(author_id, trigger.channel):
                 await self.send_to_channel(trigger.channel, f'The command `{name}` blongs to <@!{author_id}>. You cannot {verb} it.')
                 return False
         success = True
@@ -403,6 +408,8 @@ class DeepBlueSky(discord.Client):
             await self.send_to_channel(trigger.channel, f'Provide user and command name\n{usage}')
             return False
         match = re.match(r'[^#]+#[0-9]{4}(?=\s+)', command_predicate)
+        user_str: str
+        remainder: Optional[str]
         if match:
             user_str = match.group()
             remainder = command_predicate[match.end():]
@@ -543,7 +550,7 @@ class DeepBlueSky(discord.Client):
             # use patterns in python 3.10
             if command.command_type in ['function', 'simple']:
                 builtin_command_string += f'\n`{name}`: {command.get_help()}'
-            elif command.command_type == 'alias':
+            elif isinstance(command, CommandAlias):
                 alias_command_string += f'\n`{name}`: {command.value.name}'
             else:
                 self.logger.error(f'Invalid command type: {name}, {command.command_type}')
@@ -665,8 +672,8 @@ class DeepBlueSky(discord.Client):
 
     async def handle_wiki_lookup(self, trigger: discord.Message, extra_wikis: List[str]):
         chunks = get_all_noncode_chunks(trigger.content)
-        articles = [re.findall(r'\[\[(.*?)\]\]', chunk) for chunk in chunks]
-        articles = [article for chunk in articles for article in chunk if len(article.strip()) > 0]
+        article_chunks = [re.findall(r'\[\[(.*?)\]\]', chunk) for chunk in chunks]
+        articles = [article for chunk in article_chunks for article in chunk if len(article.strip()) > 0]
         if len(articles) > 0:
             await self.send_to_channel(trigger.channel, '\n'.join([lookup_wikis(article, extra_wikis=extra_wikis) for article in articles]))
             return True
@@ -710,7 +717,7 @@ class DeepBlueSky(discord.Client):
         self.log_file = open('bot_output.log', mode='a', buffering=1, encoding='UTF-8')
         handler = logging.StreamHandler(stream=self.log_file)
         formatter = logging.Formatter(fmt='[{asctime}] {levelname}: {message}', style='{')
-        formatter.converter = time.gmtime
+        formatter.converter = time.gmtime # type: ignore
         handler.setFormatter(formatter)
         self.logger.addHandler(handler)
         intents = discord.Intents.default()
