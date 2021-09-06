@@ -2,7 +2,7 @@
 
 # Deep Blue Sky python discord bot
 # This file doesn't actually create a bot
-# For the reference implementation, see tiefblauer-himmel.py
+# For the reference implementation, see __main__.py
 
 import abc
 import asyncio
