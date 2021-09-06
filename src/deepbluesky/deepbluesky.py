@@ -7,6 +7,7 @@
 import abc
 import asyncio
 import functools
+import io
 import json
 import logging
 import os
@@ -22,132 +23,12 @@ from typing import Dict, FrozenSet, Iterable, List, Tuple
 import discord
 import requests
 
-from .space import Space
-from .space import ChannelSpace, DMSpace, GuildSpace
 from .command import Command
 from .command import CommandAlias, CommandFunction, CommandSimple
-
-def identity(arg: Any) -> Any:
-    return arg
-
-def owoify(text: str) -> str:
-    text = re.sub(r'r{1,2}|l{1,2}', 'w', text)
-    text = re.sub(r'R{1,2}|L{1,2}', 'W', text)
-    text = re.sub(r'([Nn])(?=[AEIOUYaeiouy])', r'\1y', text)
-    return text
-
-def spongebob(text: str) -> str:
-    total = ''
-    upper = False
-    for char in text.lower():
-        # space characters and the like are not
-        # lowercase even if the string is lowercase
-        if char.islower():
-            if upper:
-                total += char.upper()
-            else:
-                total += char
-            upper = not upper
-        else:
-            total += char
-    return total
-
-def removeprefix(base: str, prefix: str) -> str:
-    try:
-        return base.removeprefix(prefix)
-    except AttributeError:
-        pass
-    if base.startswith(prefix):
-        return base[len(prefix):]
-    return base
-
-def removesuffix(base: str, suffix: str) -> str:
-    try:
-        return base.removesuffix(suffix)
-    except AttributeError:
-        pass
-    if base.endswith(suffix):
-        return base[:len(suffix)]
-    return base
-
-def relative_to_absolute_location(location: str, query_url: str) -> str:
-    query_url = re.sub(r'\?.*$', '', query_url)
-    if location.startswith('/'):
-        server = re.sub(r'^([a-zA-Z]+://[^/]*)/.*$', r'\1', query_url)
-        return server + location
-    if re.match(r'^[a-zA-Z]+://', location):
-        return location
-    return re.sub(r'^(([^/]*/)+)[^/]*', r'\1', query_url) + '/' + location
-
-def lookup_tvtropes(article: str) -> Tuple[bool, str]:
-    parts = re.sub(r'[^\w/]', '', article).split('/', maxsplit=1)
-    if len(parts) > 1:
-        namespace = parts[0]
-        title = parts[1]
-    else:
-        namespace = 'Main'
-        title = parts[0]
-    server = 'https://tvtropes.org'
-    query = '/pmwiki/pmwiki.php/' + namespace + '/' + title
-    result = requests.get(server + query, allow_redirects=False)
-    if 'location' in result.headers:
-        location = relative_to_absolute_location(result.headers['location'], server + query)
-        return (True, location)
-    result.encoding = 'UTF-8'
-    if re.search(r"<div>Inexact title\. See the list below\. We don't have an article named <b>{}</b>/{}, exactly\. We do have:".format(namespace, title), result.text, flags=re.IGNORECASE):
-        return (False, result.url)
-    return (True, result.url) if result.ok else (False, '')
-
-def lookup_mediawiki(mediawiki_base: str, article: str) -> Optional[str]:
-    parts = article.split('/')
-    parts = [re.sub(r'\s', r'_', part).strip('_') for part in parts]
-    article = '/'.join(parts)
-    params = {
-        'title': 'Special:Search',
-        'go': 'Go',
-        'ns0': '1',
-        'search': article,
-    }
-    result = requests.head(mediawiki_base, params=params)
-    if 'location' in result.headers:
-        location = relative_to_absolute_location(result.headers['location'], mediawiki_base)
-        if ':' in location[7:]:
-            second_result = requests.head(location)
-            return location if second_result.ok and 'last-modified' in second_result.headers else None
-        return location
-    return None
-
-def lookup_wikis(article: str, extra_wikis: List[str]) -> str:
-    for wiki in extra_wikis:
-        wiki_url = lookup_mediawiki(wiki, article)
-        if wiki_url:
-            return wiki_url
-    success, tv_url = lookup_tvtropes(article.strip())
-    if success:
-        return tv_url
-    wiki_url = lookup_mediawiki('https://en.wikipedia.org/w/index.php', article)
-    if wiki_url:
-        return wiki_url
-    return f'Inexact Title Disambiguation Page Found:\n{tv_url}' if tv_url else f'Unable to locate article: `{article}`'
-
-def snowflake_list(snowflake_input: Optional[Union[str, discord.abc.Snowflake, int, List[Union[str, discord.abc.Snowflake, int]]]]) -> List[int]:
-    if not snowflake_input:
-        return []
-
-    try:
-        snowflake_input = int(snowflake_input) # type: ignore
-    # intentionally not catching ValueError here, since string IDs should cast to int
-    # TypeError means not a snowflake, string, or int, so probably an iterable
-    except TypeError:
-        pass
-
-    try:
-        snowflake_input = list(snowflake_input) # type: ignore
-    # probably an integer
-    except TypeError:
-        snowflake_input = [snowflake_input]
-
-    return [int(snowflake) for snowflake in snowflake_input] # type: ignore
+from .space import Space
+from .space import ChannelSpace, DMSpace, GuildSpace
+from .text import identity, owoify, removeprefix, spongebob
+from .wiki import lookup_wikis
 
 def split_command(command_string: Optional[str]) -> Tuple[str, Optional[str]]:
     if not command_string:
@@ -185,13 +66,17 @@ def get_all_noncode_chunks(message_string: str) -> List[str]:
 
 class DeepBlueSky(discord.Client):
 
-    async def send_to_channel(self, channel: discord.abc.Messageable, message_to_send: str, ping_user=None, ping_roles=None):
-        ping_user = [self.get_or_fetch_user(user) for user in snowflake_list(ping_user)]
+    async def send_to_channel(self, channel: discord.abc.Messageable, content: str, ping_user: Optional[List[int]] = None, ping_roles: Optional[List[int]] = None, attachments: Optional[List[discord.File]] = None):
+        if ping_user is None:
+            ping_user = []
+        if ping_roles is None:
+            ping_roles = []
+        ping_user = [self.get_or_fetch_user(user, channel=channel) for user in ping_user]
         if hasattr(channel, 'guild'):
-            ping_roles = [channel.guild.get_role(role) for role in snowflake_list(ping_roles)]
+            ping_roles = [channel.guild.get_role(role) for role in ping_roles]
         else:
             ping_roles = []
-        await channel.send(message_to_send, allowed_mentions=discord.AllowedMentions(users=ping_user, roles=ping_roles))
+        await channel.send(content=content, allowed_mentions=discord.AllowedMentions(users=ping_user, roles=ping_roles), files=attachments)
 
     # command functions
 
@@ -453,6 +338,36 @@ class DeepBlueSky(discord.Client):
         msg = f'Message may not be empty\nUsage: `{command_name}` <message>' if not command_predicate else processor(command_predicate)
         await self.send_to_channel(trigger.channel, msg)
         return command_predicate is not None
+
+    async def markdown(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
+        usage = f'Usage: `{command_name}` <command_name>'
+        name, remainder = split_command(command_predicate)
+        if not name:
+            await self.send_to_channel(trigger.channel, f'Command name may not be empty\n{usage}')
+            return False
+        if remainder and not space.is_moderator(trigger.author):
+            await self.send_to_channel(trigger.channel, f'Only moderators may attach commands in bulk.')
+            return False
+        command_set = {name}
+        while remainder:
+            name, remainder = split_command(remainder)
+            command_set.add(name)
+        if len(command_set) > 10:
+            await self.send_to_channel(trigger.channel, f'Maximum 10 files may be attached at once.')
+            return False
+        commands = []
+        for name in command_set:
+            command = self.find_command(space, name)
+            if not command:
+                await self.send_to_channel(trigger.channel, f'Unknown command in this space: `{name}`')
+                return False
+            if command.command_type != 'simple':
+                await self.send_to_channel(trigger.channel, f'Only simple commands can be attached.')
+                return False
+            commands += [self.find_command(space, name, follow_alias=False)]
+        files = [discord.File(io.BytesIO(command.canonical().value.encode()), filename=(command.name + '.markdown')) for command in commands]
+        await self.send_to_channel(trigger.channel, content=None, attachments=files)
+        return True
 
     def get_message_space(self, message: discord.Message) -> Space:
         if hasattr(message.channel, 'guild'):
@@ -750,6 +665,7 @@ class DeepBlueSky(discord.Client):
             CommandFunction(name='say', value=self.say, helpstring='prints the text back, like echo(1)'),
             CommandFunction(name='owo', value=functools.partial(self.say, processor=owoify), helpstring='pwints the text back, wike echo(1)'),
             CommandFunction(name='spongebob', value=functools.partial(self.say, processor=spongebob), helpstring='pRiNtS tHe TeXt BaCk, LiKe EcHo(1)'),
+            CommandFunction(name='markdown', value=self.markdown, helpstring='Attach a simple command as a markdown file'),
         ]
 
         self.builtin_command_dict = OrderedDict([(command.name, command) for command in builtin_list])
