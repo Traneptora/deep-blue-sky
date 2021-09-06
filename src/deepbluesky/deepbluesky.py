@@ -100,10 +100,14 @@ def lookup_tvtropes(article: str) -> Tuple[bool, str]:
 
 def lookup_mediawiki(mediawiki_base: str, article: str) -> Optional[str]:
     parts = article.split('/')
-    parts = [re.sub(r'^\s*([^\s]+(\s+[^\s]+)*)\s*$', r'\1', part) for part in parts]
-    parts = [re.sub(r'\s', r'_', part) for part in parts]
+    parts = [re.sub(r'\s', r'_', part).strip('_') for part in parts]
     article = '/'.join(parts)
-    params = { 'title' : 'Special:Search', 'go' : 'Go', 'ns0' : '1', 'search' : article }
+    params = {
+        'title': 'Special:Search',
+        'go': 'Go',
+        'ns0': '1',
+        'search': article,
+    }
     result = requests.head(mediawiki_base, params=params)
     if 'location' in result.headers:
         location = relative_to_absolute_location(result.headers['location'], mediawiki_base)
