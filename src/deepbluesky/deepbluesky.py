@@ -66,7 +66,7 @@ def get_all_noncode_chunks(message_string: str) -> List[str]:
 
 class DeepBlueSky(discord.Client):
 
-    async def send_to_channel(self, channel: discord.abc.Messageable, content: str, ping_user: Optional[List[int]] = None, ping_roles: Optional[List[int]] = None, attachments: Optional[List[discord.File]] = None):
+    async def send_to_channel(self, channel: discord.abc.Messageable, content: Optional[str], ping_user: Optional[List[int]] = None, ping_roles: Optional[List[int]] = None, attachments: Optional[List[discord.File]] = None):
         if ping_user is None:
             ping_user = []
         if ping_roles is None:

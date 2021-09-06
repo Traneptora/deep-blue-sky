@@ -2,6 +2,8 @@
 # varous text processing stuff here
 from __future__ import annotations
 
+import re
+
 from typing import Any
 
 def identity(arg: Any) -> Any:

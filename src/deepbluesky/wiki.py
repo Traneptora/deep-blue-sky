@@ -2,8 +2,12 @@
 # wiki lookup logic here
 from __future__ import annotations
 
+import re
+
 from typing import Optional
-from typing import List
+from typing import List, Tuple
+
+import requests
 
 def relative_to_absolute_location(location: str, query_url: str) -> str:
     query_url = re.sub(r'\?.*$', '', query_url)
