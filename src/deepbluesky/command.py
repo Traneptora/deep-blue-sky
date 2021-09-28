@@ -102,7 +102,7 @@ class CommandSimple(Command):
     # override
     async def _invoke0(self, trigger: discord.Message, space: Space, name_used: str, command_predicate: Optional[str]) -> bool:
         try:
-            await space.client.send_to_channel(trigger.channel, self.value)
+            await space.client.send_to_channel(trigger.channel, trigger, self.value)
         except discord.Forbidden:
             space.client.logger.error(f'Insufficient permissions to send to channel. id: {trigger.channel.id}, name: {self.name}')
             return False

@@ -66,7 +66,7 @@ def get_all_noncode_chunks(message_string: str) -> List[str]:
 
 class DeepBlueSky(discord.Client):
 
-    async def send_to_channel(self, channel: discord.abc.Messageable, content: Optional[str], ping_user: Optional[List[int]] = None, ping_roles: Optional[List[int]] = None, attachments: Optional[List[discord.File]] = None):
+    async def send_to_channel(self, channel: discord.abc.Messageable, reply_to: Optional[discord.Message], content: Optional[str], ping_user: Optional[List[int]] = None, ping_roles: Optional[List[int]] = None, attachments: Optional[List[discord.File]] = None):
         if ping_user is None:
             ping_user = []
         if ping_roles is None:
@@ -76,7 +76,7 @@ class DeepBlueSky(discord.Client):
             ping_roles = [channel.guild.get_role(role) for role in ping_roles]
         else:
             ping_roles = []
-        await channel.send(content=content, allowed_mentions=discord.AllowedMentions(users=ping_user, roles=ping_roles), files=attachments)
+        await channel.send(content=content, allowed_mentions=discord.AllowedMentions(users=ping_user, roles=ping_roles), files=attachments, reference=reply_to, mention_author=False)
 
     # command functions
 
@@ -98,60 +98,60 @@ class DeepBlueSky(discord.Client):
             else:
                 help_string = f'Cannot provide help in this space for: `{wanted_help}`'
                 success = False
-        await self.send_to_channel(trigger.channel, help_string)
+        await self.send_to_channel(trigger.channel, trigger, help_string)
         return success
 
     async def change_prefix(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
         if not space.is_moderator(trigger.author):
-            await self.send_to_channel(trigger.channel, 'Only moderators may do this.')
+            await self.send_to_channel(trigger.channel, trigger, 'Only moderators may do this.')
             return False
         usage = f'Usage: `{command_name}` <new_prefix>'
         value: str
         value, _ = split_command(command_predicate)
         if not value:
-            await self.send_to_channel(trigger.channel, f'New prefix may not be empty\n{usage}')
+            await self.send_to_channel(trigger.channel, trigger, f'New prefix may not be empty\n{usage}')
             return False
         if not re.match(r'^[a-z0-9_\-!\.?]+$', value):
-            await self.send_to_channel(trigger.channel, f'Invalid prefix: `{value}`\nOnly ASCII alphanumeric characters or `-_!.?` permitted\n{usage}')
+            await self.send_to_channel(trigger.channel, trigger, f'Invalid prefix: `{value}`\nOnly ASCII alphanumeric characters or `-_!.?` permitted\n{usage}')
             return False
         space.command_prefix = value
         success = space.save()
         msg = f'Prefix for this space changed to `{value}`' if success else 'Unknown error when saving properties'
-        await self.send_to_channel(trigger.channel, msg)
+        await self.send_to_channel(trigger.channel, trigger, msg)
         return success
 
     async def reset_prefix(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
         if not space.is_moderator(trigger.author):
-            await self.send_to_channel(trigger.channel, 'Only moderators may do this.')
+            await self.send_to_channel(trigger.channel, trigger, 'Only moderators may do this.')
             return False
         space.command_prefix = None
         success = space.save()
         msg = f'Prefix for this space reset to the default, which is `{self.default_properties["command_prefix"]}`' if success else 'Unknown error when saving properties'
-        await self.send_to_channel(trigger.channel, msg)
+        await self.send_to_channel(trigger.channel, trigger, msg)
         return success
 
     async def create_command(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
         usage = f'Usage: `{command_name}` <command_name> <command_value | attachment>'
         new_name, new_value = split_command(command_predicate)
         if not new_name:
-            await self.send_to_channel(trigger.channel, f'Command name may not be empty\n{usage}')
+            await self.send_to_channel(trigger.channel, trigger, f'Command name may not be empty\n{usage}')
             return False
         if not re.match(r'^[a-z0-9_\-!\.?]+$', new_name):
-            await self.send_to_channel(trigger.channel, f'Invalid command name: `{new_name}`\nOnly ASCII alphanumeric characters or `-_!.?` permitted\n{usage}')
+            await self.send_to_channel(trigger.channel, trigger, f'Invalid command name: `{new_name}`\nOnly ASCII alphanumeric characters or `-_!.?` permitted\n{usage}')
             return False
         if self.find_command(space, new_name, follow_alias=False):
-            await self.send_to_channel(trigger.channel, f'The command `{new_name}` already exists in this space. Use `updatecommand` instead.')
+            await self.send_to_channel(trigger.channel, trigger, f'The command `{new_name}` already exists in this space. Use `updatecommand` instead.')
             return False
         lines = [x.strip() for x in [new_value] if x] + [attachment.url for attachment in trigger.attachments]
         if len(lines) == 0:
-            await self.send_to_channel(trigger.channel, f'Command value may not be empty\n{usage}')
+            await self.send_to_channel(trigger.channel, trigger, f'Command value may not be empty\n{usage}')
             return False
         new_value = '\n'.join(lines)
         command = CommandSimple(name=new_name, value=new_value, author=trigger.author.id, creation_time=int(time.time()), modification_time=int(time.time()))
         space.custom_command_dict[new_name] = command
         success = space.save_command(new_name)
         msg = f'Command added successfully. Try it with: `{self.get_property(space, "command_prefix")}{new_name}`' if success else 'Unknown error when evaluating command'
-        await self.send_to_channel(trigger.channel, msg)
+        await self.send_to_channel(trigger.channel, trigger, msg)
         return success
 
     async def user_exists(self, user_id: int, channel: discord.abc.Messageable) -> bool:
@@ -162,11 +162,11 @@ class DeepBlueSky(discord.Client):
         usage = f'Usage: `{command_name}` <command_names...>'
         new_name, remainder = split_command(command_predicate)
         if not new_name:
-            await self.send_to_channel(trigger.channel, f'Command name may not be empty\n{usage}')
+            await self.send_to_channel(trigger.channel, trigger, f'Command name may not be empty\n{usage}')
             return False
         # This is a security feature in case there's a bug
         if remainder and not space.is_moderator(trigger.author):
-            await self.send_to_channel(trigger.channel, 'Only moderators may remove commands in bulk.')
+            await self.send_to_channel(trigger.channel, trigger, 'Only moderators may remove commands in bulk.')
             return False
         command_set = {new_name}
         while remainder:
@@ -174,14 +174,14 @@ class DeepBlueSky(discord.Client):
             command_set.add(new_name)
         for name in command_set:
             if name in self.builtin_command_dict:
-                await self.send_to_channel(trigger.channel, 'Built-in commands cannot be removed.')
+                await self.send_to_channel(trigger.channel, trigger, 'Built-in commands cannot be removed.')
                 return False
             if name not in space.custom_command_dict:
-                await self.send_to_channel(trigger.channel, f'Unknown command in this space: `{name}`')
+                await self.send_to_channel(trigger.channel, trigger, f'Unknown command in this space: `{name}`')
                 return False
             author_id = space.custom_command_dict[name].author
             if author_id and author_id != trigger.author.id and not space.is_moderator(trigger.author) and await self.user_exists(author_id, trigger.channel):
-                await self.send_to_channel(trigger.channel, f'The command `{name}` blongs to <@!{author_id}>. You cannot remove it.')
+                await self.send_to_channel(trigger.channel, trigger, f'The command `{name}` blongs to <@!{author_id}>. You cannot remove it.')
                 return False
         success = True
         success_list = []
@@ -198,67 +198,67 @@ class DeepBlueSky(discord.Client):
                     success=False
                 command_set.remove(name)
         msg = f'Command removed successfully: `{", ".join(success_list)}`' if success else 'Unknown error when evaluating command'
-        await self.send_to_channel(trigger.channel, msg)
+        await self.send_to_channel(trigger.channel, trigger, msg)
         return success
 
     async def update_command(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
         usage = f'Usage: `{command_name}` <command_name> <command_value | attachment>'
         new_name, new_value = split_command(command_predicate)
         if not new_name:
-            await self.send_to_channel(trigger.channel, f'Command name may not be empty\n{usage}')
+            await self.send_to_channel(trigger.channel, trigger, f'Command name may not be empty\n{usage}')
             return False
         if not re.match(r'^[a-z0-9_\-!\.?]+$', new_name):
-            await self.send_to_channel(trigger.channel, f'Invalid command name: {new_name}\nOnly ASCII alphanumeric characters or `-_!.?` permitted\n{usage}')
+            await self.send_to_channel(trigger.channel, trigger, f'Invalid command name: {new_name}\nOnly ASCII alphanumeric characters or `-_!.?` permitted\n{usage}')
             return False
         if new_name in self.builtin_command_dict:
-            await self.send_to_channel(trigger.channel, 'Built-in commands cannot be updated.')
+            await self.send_to_channel(trigger.channel, trigger, 'Built-in commands cannot be updated.')
             return False
         if new_name not in space.custom_command_dict:
-            await self.send_to_channel(trigger.channel, f'Unknown command in this space: `{new_name}`')
+            await self.send_to_channel(trigger.channel, trigger, f'Unknown command in this space: `{new_name}`')
             return False
         command = space.custom_command_dict[new_name]
         if command.author and command.author != trigger.author.id and not space.is_moderator(trigger.author) and await self.user_exists(command.author, trigger.channel):
-            await self.send_to_channel(trigger.channel, f'The command `{command.name}` blongs to <@!{command.author}>. You cannot update it.')
+            await self.send_to_channel(trigger.channel, trigger, f'The command `{command.name}` blongs to <@!{command.author}>. You cannot update it.')
             return False
         lines = [x.strip() for x in [new_value] if x] + [attachment.url for attachment in trigger.attachments]
         if len(lines) == 0:
-            await self.send_to_channel(trigger.channel, f'Command value may not be empty\n{usage}')
+            await self.send_to_channel(trigger.channel, trigger, f'Command value may not be empty\n{usage}')
             return False
         new_value = '\n'.join(lines)
         if isinstance(command, CommandSimple):
             command.value = new_value
         else:
             self.logger.critical(f'custom command not simple: {command}')
-            await self.send_to_channel(trigger.channel, 'Unknown error when evaluating command')
+            await self.send_to_channel(trigger.channel, trigger, 'Unknown error when evaluating command')
             return False
         success = space.save_command(new_name)
         msg = f'Command updated successfully. Try it with: `{self.get_property(space, "command_prefix")}{new_name}`' if success else 'Unknown error when evaluating command'
-        await self.send_to_channel(trigger.channel, msg)
+        await self.send_to_channel(trigger.channel, trigger, msg)
         return success
 
     async def list_commands(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
         user_id = await space.query_users(command_predicate) if command_predicate else trigger.author.id
         if user_id == -2:
-            await self.send_to_channel(trigger.channel, f'More than one user matched query: `{command_predicate}`')
+            await self.send_to_channel(trigger.channel, trigger, f'More than one user matched query: `{command_predicate}`')
             return False
         if user_id == -1:
-            await self.send_to_channel(trigger.channel, f'Could not find user: `{command_predicate}`')
+            await self.send_to_channel(trigger.channel, trigger, f'Could not find user: `{command_predicate}`')
             return False
         owned_commands = [command.name for command in space.custom_command_dict.values() if command.author == user_id]
         msg = (f'No owned commands in this space for <@!{user_id}>'
             if len(owned_commands) == 0
             else f'<@!{user_id}> owns the following commands in this space:\n```{", ".join(owned_commands)}```')
-        await self.send_to_channel(trigger.channel, msg)
+        await self.send_to_channel(trigger.channel, trigger, msg)
         return True
 
     async def _give_command0(self, trigger: discord.Message, space: Space, command_name: str, remainder: Optional[str], verb: str, participle: str, usage: str, give_id: int) -> bool:
         new_name, remainder = split_command(remainder)
         if not new_name:
-            await self.send_to_channel(trigger.channel, f'Command name may not be empty\n{usage}')
+            await self.send_to_channel(trigger.channel, trigger, f'Command name may not be empty\n{usage}')
             return False
         # This is a security feature in case there's a bug
         if remainder and not space.is_moderator(trigger.author):
-            await self.send_to_channel(trigger.channel, f'Only moderators may {verb} commands in bulk.')
+            await self.send_to_channel(trigger.channel, trigger, f'Only moderators may {verb} commands in bulk.')
             return False
         command_set = {new_name}
         while remainder:
@@ -266,14 +266,14 @@ class DeepBlueSky(discord.Client):
             command_set.add(new_name)
         for name in command_set:
             if name in self.builtin_command_dict:
-                await self.send_to_channel(trigger.channel, f'Built-in commands cannot be {participle}.')
+                await self.send_to_channel(trigger.channel, trigger, f'Built-in commands cannot be {participle}.')
                 return False
             if name not in space.custom_command_dict:
-                await self.send_to_channel(trigger.channel, f'Unknown command in this space: `{name}`')
+                await self.send_to_channel(trigger.channel, trigger, f'Unknown command in this space: `{name}`')
                 return False
             author_id = space.custom_command_dict[name].author
             if author_id and author_id != trigger.author.id and not space.is_moderator(trigger.author) and await self.user_exists(author_id, trigger.channel):
-                await self.send_to_channel(trigger.channel, f'The command `{name}` blongs to <@!{author_id}>. You cannot {verb} it.')
+                await self.send_to_channel(trigger.channel, trigger, f'The command `{name}` blongs to <@!{author_id}>. You cannot {verb} it.')
                 return False
         success = True
         success_list = []
@@ -284,7 +284,7 @@ class DeepBlueSky(discord.Client):
             else:
                 success = False
         msg = f'Command ownership transfered successfully for: `{", ".join(success_list)}`' if success else 'Unknown error when evaluating command'
-        await self.send_to_channel(trigger.channel, msg)
+        await self.send_to_channel(trigger.channel, trigger, msg)
         return success
 
     async def take_command(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
@@ -294,7 +294,7 @@ class DeepBlueSky(discord.Client):
     async def give_command(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
         usage = f'Usage: `{command_name} <user_spec> <command_names...>`'
         if not command_predicate:
-            await self.send_to_channel(trigger.channel, f'Provide user and command name\n{usage}')
+            await self.send_to_channel(trigger.channel, trigger, f'Provide user and command name\n{usage}')
             return False
         match = re.match(r'[^#]+#[0-9]{4}(?=\s+)', command_predicate)
         user_str: str
@@ -306,10 +306,10 @@ class DeepBlueSky(discord.Client):
             user_str, remainder = split_command(command_predicate)
         user_id = await space.query_users(user_str)
         if user_id == -2:
-            await self.send_to_channel(trigger.channel, f'More than one user matched query: `{user_str}`')
+            await self.send_to_channel(trigger.channel, trigger, f'More than one user matched query: `{user_str}`')
             return False
         if user_id == -1:
-            await self.send_to_channel(trigger.channel, f'Could not find user: `{user_str}`')
+            await self.send_to_channel(trigger.channel, trigger, f'Could not find user: `{user_str}`')
             return False
         return await self._give_command0(trigger, space, command_name, remainder=remainder, verb='give', participle='given', usage=usage, give_id=user_id)
 
@@ -317,56 +317,56 @@ class DeepBlueSky(discord.Client):
         usage = f'Usage: `{command_name}` <command_name>'
         name, _ = split_command(command_predicate)
         if not name:
-            await self.send_to_channel(trigger.channel, f'Command name may not be empty\n{usage}')
+            await self.send_to_channel(trigger.channel, trigger, f'Command name may not be empty\n{usage}')
             return False
         if name in self.builtin_command_dict:
-            await self.send_to_channel(trigger.channel, f'The command `{name}` is built-in.')
+            await self.send_to_channel(trigger.channel, trigger, f'The command `{name}` is built-in.')
             return True
         command = self.find_command(space, name, follow_alias=False)
         if not command:
-            await self.send_to_channel(trigger.channel, f'Unknown command in this space: `{name}`')
+            await self.send_to_channel(trigger.channel, trigger, f'Unknown command in this space: `{name}`')
             return False
         if command.author == trigger.author.id:
-            await self.send_to_channel(trigger.channel, f'You own the command: `{name}`')
+            await self.send_to_channel(trigger.channel, trigger, f'You own the command: `{name}`')
             return True
         owner_user = await self.get_or_fetch_user(command.author, channel=trigger.channel)
         msg = f'The command `{name}` belongs to <@!{command.author}>.' if owner_user else f'The command `{name}` is currently unowned.'
-        await self.send_to_channel(trigger.channel, msg)
+        await self.send_to_channel(trigger.channel, trigger, msg)
         return True
 
     async def say(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str], processor: Callable[[str], str] = identity) -> bool:
         msg = f'Message may not be empty\nUsage: `{command_name}` <message>' if not command_predicate else processor(command_predicate)
-        await self.send_to_channel(trigger.channel, msg)
+        await self.send_to_channel(trigger.channel, trigger, msg)
         return command_predicate is not None
 
     async def markdown(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
         usage = f'Usage: `{command_name}` <command_name>'
         name, remainder = split_command(command_predicate)
         if not name:
-            await self.send_to_channel(trigger.channel, f'Command name may not be empty\n{usage}')
+            await self.send_to_channel(trigger.channel, trigger, f'Command name may not be empty\n{usage}')
             return False
         if remainder and not space.is_moderator(trigger.author):
-            await self.send_to_channel(trigger.channel, f'Only moderators may attach commands in bulk.')
+            await self.send_to_channel(trigger.channel, trigger, f'Only moderators may attach commands in bulk.')
             return False
         command_set = {name}
         while remainder:
             name, remainder = split_command(remainder)
             command_set.add(name)
         if len(command_set) > 10:
-            await self.send_to_channel(trigger.channel, f'Maximum 10 files may be attached at once.')
+            await self.send_to_channel(trigger.channel, trigger, f'Maximum 10 files may be attached at once.')
             return False
         commands = []
         for name in command_set:
             command = self.find_command(space, name)
             if not command:
-                await self.send_to_channel(trigger.channel, f'Unknown command in this space: `{name}`')
+                await self.send_to_channel(trigger.channel, trigger, f'Unknown command in this space: `{name}`')
                 return False
             if command.command_type != 'simple':
-                await self.send_to_channel(trigger.channel, f'Only simple commands can be attached.')
+                await self.send_to_channel(trigger.channel, trigger, f'Only simple commands can be attached.')
                 return False
             commands += [self.find_command(space, name, follow_alias=False)]
         files = [discord.File(io.BytesIO(command.canonical().value.encode()), filename=(command.name + '.markdown')) for command in commands]
-        await self.send_to_channel(trigger.channel, content=None, attachments=files)
+        await self.send_to_channel(trigger.channel, trigger, content=None, attachments=files)
         return True
 
     def get_message_space(self, message: discord.Message) -> Space:
@@ -455,13 +455,13 @@ class DeepBlueSky(discord.Client):
 
     async def passthrough_command(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]):
         if not command_predicate:
-            await self.send_to_channel(trigger.channel, f'Command name may not be empty\nUsage: `{command_name} <command_name> [command_args...]`')
+            await self.send_to_channel(trigger.channel, trigger, f'Command name may not be empty\nUsage: `{command_name} <command_name> [command_args...]`')
             return False
         return await self.process_command(trigger, space, command_predicate)
 
     async def list_all_commands(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]):
         if not space.is_moderator(trigger.author):
-            await self.send_to_channel(trigger.channel, 'Only moderators may do this.')
+            await self.send_to_channel(trigger.channel, trigger, 'Only moderators may do this.')
             return False
         builtin_command_string = '**Built-in Commands**'
         alias_command_string = '**Aliases**'
@@ -474,6 +474,7 @@ class DeepBlueSky(discord.Client):
             else:
                 self.logger.error(f'Invalid command type: {name}, {command.command_type}')
                 return False
+        reply_to: discord.Message = trigger
         response_string = f'{builtin_command_string}\n\n{alias_command_string}\n\n**Custom Commands**'
         if len(space.custom_command_dict) > 0:
             response_string += '```'
@@ -481,13 +482,14 @@ class DeepBlueSky(discord.Client):
                 # max 2k characters
                 # 1997 plus the ``` at the end gives 2k
                 if len(response_string) + len(name) > 1997:
-                    await self.send_to_channel(trigger.channel, f'{response_string[:-2]}```')
+                    await self.send_to_channel(trigger.channel, reply_to, f'{response_string[:-2]}```')
+                    reply_to = None
                     response_string = '```'
                 response_string += f'{name}, '
             response_string = f'{response_string[:-2]}```'
         else:
             response_string += '\n*(There are no custom commands in this space.)*'
-        await self.send_to_channel(trigger.channel, response_string)
+        await self.send_to_channel(trigger.channel, reply_to, response_string)
         return True
 
     # The name has to be legal, or it will exception
@@ -552,41 +554,41 @@ class DeepBlueSky(discord.Client):
         command = self.find_command(space, command_name, follow_alias=True)
         if command:
             return await command.invoke(trigger, space, command_name, command_predicate)
-        await self.send_to_channel(trigger.channel, f'Unknown command in this space: `{command_name}`')
+        await self.send_to_channel(trigger.channel, trigger, f'Unknown command in this space: `{command_name}`')
         return False
 
     # wikitext stuff
 
     async def set_wikitext(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
         if not space.is_moderator(trigger.author):
-            await self.send_to_channel(trigger.channel, 'Only moderators may do this.')
+            await self.send_to_channel(trigger.channel, trigger, 'Only moderators may do this.')
             return False
         usage = f'Usage: `{command_name}` <enable/disable>'
         value, _ = split_command(command_predicate)
         if not value:
-            await self.send_to_channel(trigger.channel, f'Choose enable or disable.\n{usage}')
+            await self.send_to_channel(trigger.channel, trigger, f'Choose enable or disable.\n{usage}')
             return False
         if re.match(r'^yes|on|true|enabled?$', value):
             new_value = True
         elif re.match(r'^no|off|false|disabled?$', value):
             new_value = False
         else:
-            await self.send_to_channel(trigger.channel, f'Invalid enable/disable value.\n{usage}')
+            await self.send_to_channel(trigger.channel, trigger, f'Invalid enable/disable value.\n{usage}')
             return False
         space.wikitext = new_value
         success = space.save()
         msg = f'Wikitext for this space changed to `{new_value}`' if success else 'Unknown error when saving properties'
-        await self.send_to_channel(trigger.channel, msg)
+        await self.send_to_channel(trigger.channel, trigger, msg)
         return success
 
     async def reset_wikitext(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
         if not space.is_moderator(trigger.author):
-            await self.send_to_channel(trigger.channel, 'Only moderators may do this.')
+            await self.send_to_channel(trigger.channel, trigger, 'Only moderators may do this.')
             return False
         space.wikitext = None
         success = space.save()
         msg = f'Wikitext for this space reset to the default, which is `{self.default_properties["wikitext"]}`' if success else 'Unknown error when saving properties'
-        await self.send_to_channel(trigger.channel, msg)
+        await self.send_to_channel(trigger.channel, trigger, msg)
         return success
 
     async def handle_wiki_lookup(self, trigger: discord.Message, extra_wikis: List[str]):
@@ -594,7 +596,7 @@ class DeepBlueSky(discord.Client):
         article_chunks = [re.findall(r'\[\[(.*?)\]\]', chunk) for chunk in chunks]
         articles = [article for chunk in article_chunks for article in chunk if len(article.strip()) > 0]
         if len(articles) > 0:
-            await self.send_to_channel(trigger.channel, '\n'.join([lookup_wikis(article, extra_wikis=extra_wikis) for article in articles]))
+            await self.send_to_channel(trigger.channel, trigger, '\n'.join([lookup_wikis(article, extra_wikis=extra_wikis) for article in articles]))
             return True
         return False
 
