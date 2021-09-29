@@ -41,7 +41,7 @@ class Command(abc.ABC):
                     space.client.logger.info(f'Command succeeded, author: {trigger.author.id}, name: {self.name}')
                 else:
                     space.client.logger.info(f'Command failed, author: {trigger.author.id}, name: {self.name}')
-                return True
+                return result
             # pylint: disable=broad-except
             except Exception as ex:
                 space.client.logger.critical(f'Unexpected exception during command invocation: {str(ex)}', exc_info=True)
