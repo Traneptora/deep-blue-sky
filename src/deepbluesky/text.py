@@ -48,3 +48,6 @@ def removesuffix(base: str, suffix: str) -> str:
     if base.endswith(suffix):
         return base[:len(suffix)]
     return base
+
+def pluralize(count: int, singular: str, plural: Optional[str] = None) -> str:
+    return singular if count == 1 else plural if plural is not None else singular + 's'

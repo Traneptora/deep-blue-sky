@@ -27,7 +27,7 @@ from .command import Command
 from .command import CommandAlias, CommandFunction, CommandSimple
 from .space import Space
 from .space import ChannelSpace, DMSpace, GuildSpace
-from .text import identity, owoify, removeprefix, spongebob
+from .text import identity, owoify, removeprefix, spongebob, pluralize
 from .wiki import lookup_wikis
 
 def split_command(command_string: Optional[str]) -> Tuple[str, Optional[str]]:
@@ -338,6 +338,50 @@ class DeepBlueSky(discord.Client):
         msg = f'Message may not be empty\nUsage: `{command_name}` <message>' if not command_predicate else processor(command_predicate)
         await self.send_to_channel(trigger.channel, trigger, msg)
         return command_predicate is not None
+
+    async def search(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
+        usage = f'Usage: `{command_name}` <command_name> [page_number]'
+        name, remainder = split_command(command_predicate)
+        if not name:
+            await self.send_to_channel(trigger.channel, trigger, f'Command name may not be empty\n{usage}')
+            return False
+        page_number:int = 1
+        if remainder:
+            try:
+                page_number = int(remainder)
+            except ValueError:
+                await self.send_to_channel(trigger.channel, trigger, f'`page_number` must be an integer\n{usage}')
+                return False
+            if page_number <= 0:
+                await self.send_to_channel(trigger.channel, trigger, f'`page_number` must be positive\n{usage}')
+                return False
+        page_number -= 1
+        builtin_matches: Set[str] = set()
+        for cname, cvalue in self.builtin_command_dict.items():
+            if cname.find(name) >= 0 and await cvalue.can_call(trigger, space):
+                builtin_matches.add(cname)
+        custom_matches: Set[str] = set()
+        for cname, cvalue in space.custom_command_dict.items():
+            if cname.find(name) >= 0 and await cvalue.can_call(trigger, space):
+                custom_matches.add(cname)
+        builtin_list: List[str] = list(builtin_matches)
+        custom_list: List[str] = list(custom_matches)
+        builtin_list.sort()
+        custom_list.sort()
+        found_list: List[str] = builtin_list + custom_list
+        num_found: int = len(found_list)
+        page_size: int = 10
+        if num_found == 0:
+            await self.send_to_channel(trigger.channel, trigger, f'No commands found for search: `{name}`')
+            return False
+        page_count: int = (num_found-1)//page_size + 1
+        msg = f'{num_found} {pluralize(num_found, "command")} found, {page_size} {pluralize(page_size, "result")} per page, {page_count} {pluralize(page_count, "page")}:'
+        if page_number * page_size >= num_found:
+            await self.send_to_channel(trigger.channel, trigger, f'{msg}\nPage number out of range.')
+            return False
+        found_msg = f'{msg}\n`' + '`, `'.join(found_list[page_number*page_size : (page_number+1)*page_size]) + '`'
+        await self.send_to_channel(trigger.channel, trigger, found_msg)
+        return True
 
     async def markdown(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
         usage = f'Usage: `{command_name}` <command_name>'
@@ -668,6 +712,7 @@ class DeepBlueSky(discord.Client):
             CommandFunction(name='owo', value=functools.partial(self.say, processor=owoify), helpstring='pwints the text back, wike echo(1)'),
             CommandFunction(name='spongebob', value=functools.partial(self.say, processor=spongebob), helpstring='pRiNtS tHe TeXt BaCk, LiKe EcHo(1)'),
             CommandFunction(name='markdown', value=self.markdown, helpstring='Attach a simple command as a markdown file'),
+            CommandFunction(name='search', value=self.search, helpstring='Search for a command by name'),
         ]
 
         self.builtin_command_dict = OrderedDict([(command.name, command) for command in builtin_list])
