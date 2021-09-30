@@ -136,8 +136,8 @@ class DeepBlueSky(discord.Client):
         if not new_name:
             await self.send_to_channel(trigger.channel, trigger, f'Command name may not be empty\n{usage}')
             return False
-        if not re.match(r'^[a-z0-9_\-!\.?]+$', new_name):
-            await self.send_to_channel(trigger.channel, trigger, f'Invalid command name: `{new_name}`\nOnly ASCII alphanumeric characters or `-_!.?` permitted\n{usage}')
+        if not re.match(r'^[a-z_\-\.][a-z0-9_\-\.!?]*$', new_name):
+            await self.send_to_channel(trigger.channel, trigger, f'Invalid command name: `{new_name}`\nOnly ASCII alphanumeric characters or `-_!.?` permitted.\nCommands also cannot start with a number or `!?`.\n{usage}')
             return False
         if self.find_command(space, new_name, follow_alias=False):
             await self.send_to_channel(trigger.channel, trigger, f'The command `{new_name}` already exists in this space. Use `updatecommand` instead.')
@@ -592,7 +592,9 @@ class DeepBlueSky(discord.Client):
         return member_obj
 
     async def process_command(self, trigger: discord.Message, space: Space, command_string: str) -> bool:
-        command_name, command_predicate = split_command(command_string)
+        if not re.match(r'^[a-z_\-\.][a-z0-9_\-\.!?]*', command_string):
+            return False
+        command_name, command_predicate = split_command(command_string.strip())
         if not command_name:
             return False
         command = self.find_command(space, command_name, follow_alias=True)
@@ -658,7 +660,7 @@ class DeepBlueSky(discord.Client):
         space = self.get_message_space(trigger)
         prefix = self.get_property(space, 'command_prefix')
         if content.startswith(prefix):
-            command_string = removeprefix(content, prefix).strip()
+            command_string = removeprefix(content, prefix)
             await self.process_command(trigger, space, command_string)
             return True
         if self.get_property(space, 'wikitext'):
