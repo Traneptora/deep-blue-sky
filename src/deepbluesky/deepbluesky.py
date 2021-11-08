@@ -6,6 +6,7 @@
 
 import abc
 import asyncio
+import datetime
 import functools
 import io
 import json
@@ -15,11 +16,13 @@ import re
 import signal
 import sys
 import time
+import warnings
 
 from collections import OrderedDict
 from typing import Any, Callable, Literal, Optional, Union
 from typing import Dict, FrozenSet, Iterable, List, Tuple
 
+import dateutil.parser
 import discord
 import requests
 
@@ -383,6 +386,28 @@ class DeepBlueSky(discord.Client):
         await self.send_to_channel(trigger.channel, trigger, found_msg)
         return True
 
+    async def get_time(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
+        usage = f'Usage: `{command_name}` [time]'
+        if not command_predicate:
+            dt = datetime.datetime.now(datetime.timezone.utc)
+        else:
+            with warnings.catch_warnings() as w:
+                warnings.filterwarnings('error')
+                try:
+                    timestring = command_predicate.replace('+', '\x01').replace('-', '+').replace('\x01', '-')
+                    dt = dateutil.parser.parse(timestring)
+                except dateutil.parser._parser.UnknownTimezoneWarning:
+                    await self.send_to_channel(trigger.channel, trigger, f'Unknown Timezone. Use UTC offsets.\n{usage}')
+                    return False
+                except dateutil.parser._parser.ParserError:
+                    await self.send_to_channel(trigger.channel, trigger, f'Could not parse given time.\n{usage}')
+                    return False
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=datetime.timezone.utc)
+        timestamp = int(dt.timestamp())
+        await self.send_to_channel(trigger.channel, trigger, f'Unix Time: `{timestamp}` <t:{timestamp}>')
+        return True
+
     async def markdown(self, trigger: discord.Message, space: Space, command_name: str, command_predicate: Optional[str]) -> bool:
         usage = f'Usage: `{command_name}` <command_name>'
         name, remainder = split_command(command_predicate)
@@ -715,6 +740,7 @@ class DeepBlueSky(discord.Client):
             CommandFunction(name='spongebob', value=functools.partial(self.say, processor=spongebob), helpstring='pRiNtS tHe TeXt BaCk, LiKe EcHo(1)'),
             CommandFunction(name='markdown', value=self.markdown, helpstring='Attach a simple command as a markdown file'),
             CommandFunction(name='search', value=self.search, helpstring='Search for a command by name'),
+            CommandFunction(name='time', value=self.get_time, helpstring='Convert time to Unix Time. UTC assumed if not specified.')
         ]
 
         self.builtin_command_dict = OrderedDict([(command.name, command) for command in builtin_list])

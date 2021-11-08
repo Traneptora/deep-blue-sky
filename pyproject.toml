@@ -3,5 +3,7 @@ requires = [
     "setuptools>=42",
     "wheel",
     "discord",
+    "requests",
+    "python-dateutil"
 ]
 build-backend = "setuptools.build_meta"
