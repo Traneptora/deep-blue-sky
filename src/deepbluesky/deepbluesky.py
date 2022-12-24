@@ -715,9 +715,8 @@ class DeepBlueSky(discord.Client):
         intents = discord.Intents.default()
         # pylint: disable=assigning-non-slot
         intents.members = True
+        intents.message_content = True
         super().__init__(*args, allowed_mentions=discord.AllowedMentions.none(), intents=intents, chunk_guilds_at_startup=True, **kwargs)
-        for sig in [signal.SIGINT, signal.SIGTERM, signal.SIGHUP, signal.SIGQUIT]:
-            self.loop.add_signal_handler(sig, lambda sig = sig: asyncio.create_task(self.signal_handler(sig, self.loop)))
 
         builtin_list = [
             CommandFunction(name='help', value=self.send_help, helpstring='Print help messages'),
@@ -806,8 +805,9 @@ class DeepBlueSky(discord.Client):
         game = discord.Game(self.default_properties['command_prefix'] + 'help')
         await self.change_presence(status=discord.Status.online, activity=game)
 
-    def run(self, token=None):
-
+    async def run_bot(self, token=None):
+        for sig in [signal.SIGINT, signal.SIGTERM, signal.SIGHUP, signal.SIGQUIT]:
+            self.loop.add_signal_handler(sig, lambda sig = sig: asyncio.create_task(self.signal_handler(sig, self.loop)))
         if not token:
             with open('oauth_token', 'r', encoding='UTF-8') as token_file:
                 token = token_file.read()            
@@ -817,7 +817,4 @@ class DeepBlueSky(discord.Client):
 
         self.logger.info(f'Beginning connection as {self.bot_name}')
 
-        try:
-            self.loop.run_until_complete(self.start(token, reconnect=True))
-        finally:
-            self.loop.close()
+        await self.start(token=token, reconnect=True)
