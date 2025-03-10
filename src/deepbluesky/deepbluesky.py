@@ -439,12 +439,12 @@ class DeepBlueSky(discord.Client):
         return True
 
     def get_message_space(self, message: discord.Message) -> Space:
+        if message.channel.type == discord.ChannelType.private:
+            return self.get_dm_space(message.channel.recipient.id)
+        if message.channel.type == discord.ChannelType.group:
+            return self.get_channel_space(message.channel.id)
         if hasattr(message.channel, 'guild'):
             return self.get_guild_space(message.channel.guild.id)
-        if hasattr(message.channel, 'recipient'):
-            return self.get_dm_space(message.channel.recipient.id)
-        if hasattr(message.channel, 'recipients'):
-            return self.get_channel_space(message.channel.id)
         msg = f'Uknown space for message: {message.id}'
         self.logger.critical(msg)
         raise ValueError(msg)
