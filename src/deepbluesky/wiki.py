@@ -47,7 +47,11 @@ def lookup_mediawiki(mediawiki_base: str, article: str) -> Optional[str]:
         'ns0': '1',
         'search': article,
     }
-    result = requests.head(mediawiki_base, params=params)
+    headers = {
+        'User-Agent': 'Deep Blue Sky',
+        'From': 'https://github.com/Traneptora/deep-blue-sky',
+    }
+    result = requests.head(mediawiki_base, params=params, headers=headers)
     if 'location' in result.headers:
         location = relative_to_absolute_location(result.headers['location'], mediawiki_base)
         if ':' in location[7:]:
