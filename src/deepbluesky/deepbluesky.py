@@ -26,12 +26,20 @@ import dateutil.parser
 import discord
 import requests
 
-from .command import Command
-from .command import CommandAlias, CommandFunction, CommandSimple
-from .space import Space
-from .space import ChannelSpace, DMSpace, GuildSpace
-from .text import identity, owoify, removeprefix, spongebob, pluralize
-from .wiki import lookup_wikis
+try:
+    from .command import Command
+    from .command import CommandAlias, CommandFunction, CommandSimple
+    from .space import Space
+    from .space import ChannelSpace, DMSpace, GuildSpace
+    from .text import identity, owoify, removeprefix, spongebob, pluralize
+    from .wiki import lookup_wikis
+except ImportError:
+    from command import Command
+    from command import CommandAlias, CommandFunction, CommandSimple
+    from space import Space
+    from space import ChannelSpace, DMSpace, GuildSpace
+    from text import identity, owoify, removeprefix, spongebob, pluralize
+    from wiki import lookup_wikis
 
 def split_command(command_string: Optional[str]) -> Tuple[str, Optional[str]]:
     if not command_string:

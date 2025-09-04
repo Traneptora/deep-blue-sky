@@ -10,10 +10,17 @@ from typing import TYPE_CHECKING, Any, Optional
 from typing import Dict, FrozenSet, List, OrderedDict
 
 import discord
-from .command import Command, CommandAlias, CommandSimple
+
+try:
+    from .command import Command, CommandAlias, CommandSimple
+except ImportError:
+    from command import Command, CommandAlias, CommandSimple
 
 if TYPE_CHECKING:
-    from .deepbluesky import DeepBlueSky
+    try:
+        from .deepbluesky import DeepBlueSky
+    except ImportError:
+        from deepbluesky import DeepBlueSky
 
 class Space(abc.ABC):
 

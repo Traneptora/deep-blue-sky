@@ -4,7 +4,10 @@
 
 import asyncio
 import discord
-from .deepbluesky import DeepBlueSky
+try:
+    from .deepbluesky import DeepBlueSky
+except ImportError:
+    from deepbluesky import DeepBlueSky
 
 # Launch a default Deep Blue Sky bot
 
