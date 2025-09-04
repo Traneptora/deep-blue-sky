@@ -4,6 +4,6 @@ requires = [
     "wheel",
     "discord>=2",
     "requests",
-    "python-dateutil"
+    "python-dateutil",
 ]
 build-backend = "setuptools.build_meta"
